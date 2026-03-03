@@ -35,8 +35,8 @@ export default function LandNavbar() {
   const isDark = theme === 'dark';
 
   const headerClass = isDark
-    ? 'absolute inset-x-0 top-0 z-50 border-b border-white/10 bg-gray-950/80 backdrop-blur-md'
-    : 'absolute inset-x-0 top-0 z-50 border-b border-black/10 bg-white/80 backdrop-blur-md';
+    ? 'fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-gray-950/90 backdrop-blur-md'
+    : 'fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-white/90 backdrop-blur-md';
 
   const linkClass = isDark
     ? 'text-sm font-semibold leading-6 text-white'
@@ -62,7 +62,7 @@ export default function LandNavbar() {
 
   return (
     <header className={headerClass}>
-      <nav aria-label="Global" className="flex items-center justify-between p-6 lg:px-8">
+      <nav aria-label="Global" className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <div className="flex lg:flex-1">
           <a href="#" className="-m-1.5 p-1.5">
@@ -111,8 +111,8 @@ export default function LandNavbar() {
             onClick={toggleTheme}
             aria-label="Toggle theme"
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-all duration-300 ${isDark
-                ? 'border-white/20 text-yellow-300 bg-white/5 hover:bg-white/10'
-                : 'border-black/10 text-gray-600 bg-black/5 hover:bg-black/10'
+              ? 'border-white/20 text-yellow-300 bg-white/5 hover:bg-white/10'
+              : 'border-black/10 text-gray-600 bg-black/5 hover:bg-black/10'
               }`}
           >
             {isDark ? (
