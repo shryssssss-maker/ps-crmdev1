@@ -9,6 +9,8 @@ type UrgentTask = {
   title: string
   location: string
   severity: string
+  lat: number
+  lng: number
 }
 
 export default function UrgentTaskCard() {
@@ -19,33 +21,62 @@ export default function UrgentTaskCard() {
 
   useEffect(() => {
 
-    async function loadUrgentTask() {
+    let channel: any
+
+    async function loadNearestUrgentTask() {
 
       const { data: userData } = await supabase.auth.getUser()
       const workerId = userData?.user?.id
-
       if (!workerId) return
 
-      const { data } = await supabase
-        .from("complaints")
-        .select("id, title, address_text, effective_severity")
-        .eq("assigned_worker_id", workerId)
-        .eq("effective_severity", "L4")
-        .order("created_at", { ascending: false })
-        .limit(1)
+      // Get worker location
+      const { data: worker } = await supabase
+        .from("worker_profiles")
+        .select("last_location")
+        .eq("id", workerId)
         .single()
 
-      if (!data) return
+      if (!worker?.last_location) return
+
+      const { data } = await supabase
+        .rpc("nearest_urgent_complaint", {
+          worker_location: worker.last_location
+        })
+
+      if (!data || data.length === 0) return
+
+      const task = data[0]
 
       setUrgentTask({
-        complaintId: data.id,
-        title: data.title,
-        location: data.address_text ?? "Unknown location",
-        severity: data.effective_severity
+        complaintId: task.id,
+        title: task.title,
+        location: task.address_text ?? "Unknown location",
+        severity: task.effective_severity,
+        lat: task.lat,
+        lng: task.lng
       })
     }
 
-    loadUrgentTask()
+    loadNearestUrgentTask()
+
+    channel = supabase
+      .channel("urgent-complaints")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "complaints"
+        },
+        () => {
+          loadNearestUrgentTask()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
 
   }, [])
 
@@ -91,11 +122,21 @@ export default function UrgentTaskCard() {
 
       <div className="flex gap-3">
 
-        <button className="px-5 py-2 rounded-lg bg-amber-700 text-white font-medium hover:bg-amber-800 transition">
+        <button
+          className="px-5 py-2 rounded-lg bg-amber-700 text-white font-medium hover:bg-amber-800 transition"
+        >
           Start Work
         </button>
 
-        <button className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition">
+        <button
+          onClick={() =>
+            window.open(
+              `https://www.google.com/maps?q=${urgentTask.lat},${urgentTask.lng}`,
+              "_blank"
+            )
+          }
+          className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+        >
           Navigate
         </button>
 
