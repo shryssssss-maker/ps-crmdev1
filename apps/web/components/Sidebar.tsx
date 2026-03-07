@@ -179,7 +179,7 @@ const Sidebar: React.FC<SidebarConfig> = ({
         ref={sidebarRef} 
         className={`
           fixed top-0 left-0 z-50 h-screen flex flex-col py-8 overflow-x-visible font-sans transition-all duration-300 ease-in-out
-          ${colors.background} ${colors.border} lg:border-r lg:relative lg:translate-x-0
+          ${colors.background} ${colors.border} lg:border-r lg:translate-x-0
           ${isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
           ${isCollapsed ? "w-20" : "w-64"}
         `}
