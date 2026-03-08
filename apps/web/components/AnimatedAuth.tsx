@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
-import { User, Lock, Mail } from 'lucide-react';
+import { User, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/src/lib/supabase';
 import { useTheme } from './ThemeProvider';
@@ -405,7 +405,7 @@ export default function AnimatedAuth({
             {loading ? 'Please wait...' : 'Login via Google'}
           </button>
           <p className="text-xs text-gray-400 mt-4 text-center">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <button onClick={() => setIsLogin(false)} style={{ color: activeThemeColor }} className="hover:underline">
               Sign Up
             </button>
