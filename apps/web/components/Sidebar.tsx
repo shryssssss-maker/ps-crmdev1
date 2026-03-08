@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from "lucide-react";
 import gsap from "gsap";
 import { useTheme } from "@/components/ThemeProvider";
@@ -96,6 +97,7 @@ export interface SidebarConfig {
   onClose: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onLogout?: () => void;
 }
 
 // 2. Default Configuration (matches your Taskify UI design)
@@ -139,7 +141,8 @@ const Sidebar: React.FC<SidebarConfig> = ({
   isOpen, 
   onClose,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  onLogout
 }) => {
   const sidebarRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme } = useTheme();
