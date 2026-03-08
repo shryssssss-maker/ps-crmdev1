@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { 
   Flame, 
   LayoutGrid, 
@@ -13,8 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Moon,
-  LogOut
+  Moon
 } from "lucide-react";
 import gsap from "gsap";
 import { useTheme } from "@/components/ThemeProvider";
@@ -132,6 +131,7 @@ export const defaultSidebarConfig: Omit<SidebarConfig, "isOpen" | "onClose" | "i
   ],
 };
 
+
 // 3. The Component
 const Sidebar: React.FC<SidebarConfig> = ({ 
   branding, 
@@ -147,7 +147,11 @@ const Sidebar: React.FC<SidebarConfig> = ({
   const sidebarRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
-
+  
+const [mounted, setMounted] = useState(false);
+useEffect(() => {
+  setMounted(true);
+}, []);
   useEffect(() => {
     // GSAP stagger animation - only runs when the sidebar is rendered/opened
     const ctx = gsap.context(() => {
@@ -182,8 +186,8 @@ const Sidebar: React.FC<SidebarConfig> = ({
       <aside 
         ref={sidebarRef} 
         className={`
-          fixed top-0 left-0 z-50 h-screen flex flex-col py-8 overflow-x-visible font-sans transition-all duration-300 ease-in-out
-          ${colors.background} ${colors.border} lg:border-r lg:translate-x-0
+          fixed lg:relative top-0 left-0 z-50 min-h-screen flex flex-col py-8 overflow-x-visible font-sans transition-all duration-300 ease-in-out
+          ${colors.background} ${colors.border} lg:border-r lg:relative lg:translate-x-0
           ${isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
           ${isCollapsed ? "w-20" : "w-64"}
         `}
@@ -191,7 +195,7 @@ const Sidebar: React.FC<SidebarConfig> = ({
         {/* Desktop Collapse Toggle */}
         <button
           onClick={onToggleCollapse}
-          className={`absolute -right-3 top-10 z-50 hidden lg:flex h-6 w-6 items-center justify-center rounded-full border text-gray-500 shadow-md hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-white transition-colors ${colors.toggleButtonBg}`}
+          className={`absolute -right-3 top-10 z-50 hidden lg:flex h-6 w-6 items-center justify-center rounded-full border text-gray-500 shadow-md hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-white transition-all duration-200 focus:ring-2 focus:ring-offset-2 focus:ring-[#b4725a] dark:focus:ring-purple-500 focus:outline-none ${colors.toggleButtonBg}`}
         >
           {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -209,7 +213,7 @@ const Sidebar: React.FC<SidebarConfig> = ({
               </span>
             </div>
             {/* Close button only visible on mobile */}
-            <button onClick={onClose} className={`lg:hidden text-gray-500 hover:text-gray-900 dark:hover:text-white ${isCollapsed ? "hidden" : "block"}`}>
+            <button onClick={onClose} className={`lg:hidden text-gray-500 hover:text-gray-900 dark:hover:text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#b4725a] dark:focus:ring-purple-500 rounded-md ${isCollapsed ? "hidden" : "block"}`}>
               <X size={24} />
             </button>
           </div>
@@ -224,7 +228,8 @@ const Sidebar: React.FC<SidebarConfig> = ({
                 <Link 
                   href={item.href} 
                   className={`
-                    flex items-center ${isCollapsed ? "justify-center px-2" : "justify-start px-4"} py-3 ml-2 rounded-xl font-medium transition-all duration-300
+                    flex items-center ${isCollapsed ? "justify-center px-2" : "justify-start px-4"} py-3 ml-2 rounded-xl font-medium transition-all duration-200
+                    focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b4725a] dark:focus:ring-purple-500
                     ${item.isActive 
                       ? `${colors.activeBg} ${colors.activeText} font-semibold` 
                       : `${colors.textMuted} ${colors.textHover} ${colors.bgHover}`
@@ -258,14 +263,14 @@ const Sidebar: React.FC<SidebarConfig> = ({
           <button
             type="button"
             onClick={toggleTheme}
-            className={`menu-item flex w-full items-center ${isCollapsed ? "justify-center px-2 gap-0" : "justify-start px-4 gap-4"} py-3 ml-2 rounded-xl font-medium transition-all duration-300 ${colors.textMuted} ${colors.textHover} ${colors.bgHover}`}
+            className={`menu-item flex w-full items-center ${isCollapsed ? "justify-center px-2 gap-0" : "justify-start px-4 gap-4"} py-3 ml-2 rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b4725a] dark:focus:ring-purple-500 ${colors.textMuted} ${colors.textHover} ${colors.bgHover}`}
             title={isCollapsed ? (isDark ? "Light Mode" : "Dark Mode") : undefined}
           >
             <div className="shrink-0">
-              {isDark ? <Sun size={20} strokeWidth={2} /> : <Moon size={20} strokeWidth={2} />}
+              {mounted && (isDark ? <Sun size={20} strokeWidth={2} /> : <Moon size={20} strokeWidth={2} />)}
             </div>
             <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? "max-w-0 opacity-0" : "max-w-[200px] opacity-100"}`}>
-              {isDark ? "Light Mode" : "Dark Mode"}
+              {mounted && (isDark ? "Light Mode" : "Dark Mode")}
             </span>
           </button>
 

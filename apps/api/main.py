@@ -78,6 +78,7 @@ origins = [
     "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
+    "http://10.176.53.15:3000",
     "https://jansamadhan.perkkk.dev",
     "https://api.jansamadhan.perkkk.dev",
 ]
@@ -830,7 +831,6 @@ async def confirm(
     location_wkt = f"POINT({longitude} {latitude})"
     address_text = (
         f"{formatted_address} | gps_accuracy_m={accuracy:.1f} | gps_timestamp={timestamp}"
-        f" | img_hash={image_hash[:16]} | img_upload={upload_time} | device={device_type[:60]}"
     )
     complaint_record = build_complaint_record(
         user_id=citizen_id,

@@ -74,7 +74,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onLogout={handleLogout}
       />
 
-
       {/* Keep content adjacent to fixed sidebar on desktop */}
       <main className={`flex-1 w-full p-4 transition-[margin] duration-300 ${isCollapsed ? "lg:ml-20" : "lg:ml-64"}`}>
         <button 
