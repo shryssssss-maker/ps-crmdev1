@@ -10,10 +10,25 @@ import type {
   AuthorityProfileRow,
   CategoryRow,
   ComplaintAssignmentRow,
-  WorkerProfileRow,
   WorkloadLevel,
 } from "@/components/admin-authorities/types"
 import { supabase } from "@/src/lib/supabase"
+
+type WorkerProfileRow = {
+  worker_id: string
+  department: string
+  availability: string
+  total_resolved: number
+}
+
+type WorkerComplaintAssignmentRow = {
+  id: string
+  assigned_worker_id: string | null
+  assigned_department: string | null
+  status: ComplaintAssignmentRow["status"]
+  created_at: string
+  resolved_at: string | null
+}
 
 const baseDepartments = [
   "Municipal Corporation",
@@ -39,7 +54,7 @@ function determineWorkload(activeTickets: number): WorkloadLevel {
   return "normal"
 }
 
-function calculateAverageResolutionDays(rows: ComplaintAssignmentRow[]): number {
+function calculateAverageResolutionDays(rows: WorkerComplaintAssignmentRow[]): number {
   const durations = rows
     .filter((row) => row.resolved_at)
     .map((row) => {
@@ -55,8 +70,8 @@ function calculateAverageResolutionDays(rows: ComplaintAssignmentRow[]): number 
   return total / durations.length
 }
 
-export default function AuthoritiesPage() {
-  const [authorities, setAuthorities] = useState<AuthorityRecord[]>([])
+export default function WorkersPage() {
+  const [workers, setWorkers] = useState<AuthorityRecord[]>([])
   const [search, setSearch] = useState("")
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [departmentOptions, setDepartmentOptions] = useState<string[]>(baseDepartments)
@@ -64,19 +79,19 @@ export default function AuthoritiesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => new Date())
-  const [viewAuthority, setViewAuthority] = useState<AuthorityRecord | null>(null)
-  const [assignAuthority, setAssignAuthority] = useState<AuthorityRecord | null>(null)
+  const [viewWorker, setViewWorker] = useState<AuthorityRecord | null>(null)
+  const [assignWorker, setAssignWorker] = useState<AuthorityRecord | null>(null)
   const [departmentDraft, setDepartmentDraft] = useState("")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [newAuthorityName, setNewAuthorityName] = useState("")
-  const [newAuthorityEmail, setNewAuthorityEmail] = useState("")
-  const [newAuthorityPhone, setNewAuthorityPhone] = useState("")
-  const [newAuthorityCity, setNewAuthorityCity] = useState("")
-  const [newAuthorityDepartment, setNewAuthorityDepartment] = useState("")
-  const [newAuthorityPassword, setNewAuthorityPassword] = useState("")
+  const [newWorkerName, setNewWorkerName] = useState("")
+  const [newWorkerEmail, setNewWorkerEmail] = useState("")
+  const [newWorkerPhone, setNewWorkerPhone] = useState("")
+  const [newWorkerCity, setNewWorkerCity] = useState("")
+  const [newWorkerDepartment, setNewWorkerDepartment] = useState("")
+  const [newWorkerPassword, setNewWorkerPassword] = useState("")
 
-  const fetchAuthorities = useCallback(async () => {
+  const fetchWorkers = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -87,12 +102,12 @@ export default function AuthoritiesPage() {
 
     if (sessionError || !session?.access_token) {
       setError("You must be logged in as admin")
-      setAuthorities([])
+      setWorkers([])
       setLoading(false)
       return
     }
 
-    const response = await fetch("/api/admin/authorities", {
+    const response = await fetch("/api/admin/workers", {
       method: "GET",
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -103,29 +118,29 @@ export default function AuthoritiesPage() {
     const payload = (await response.json().catch(() => null)) as {
       error?: string
       profiles?: AuthorityProfileRow[]
-      complaints?: ComplaintAssignmentRow[]
-      workers?: WorkerProfileRow[]
+      complaints?: WorkerComplaintAssignmentRow[]
+      workerProfiles?: WorkerProfileRow[]
       categories?: CategoryRow[]
     } | null
 
     if (!response.ok || !payload) {
-      setError(payload?.error || "Unable to load authorities")
-      setAuthorities([])
+      setError(payload?.error || "Unable to load workers")
+      setWorkers([])
       setLoading(false)
       return
     }
 
     const profileRows = payload.profiles ?? []
     const complaintRows = payload.complaints ?? []
-    const workerRows = payload.workers ?? []
+    const workerProfileRows = payload.workerProfiles ?? []
     const categoryRows = payload.categories ?? []
 
     const departmentsSet = new Set<string>(baseDepartments)
     const workersByDepartment = new Map<string, number>()
     const categoriesByDepartment = new Map<string, string[]>()
-    const complaintsByOfficer = new Map<string, ComplaintAssignmentRow[]>()
+    const complaintsByWorker = new Map<string, WorkerComplaintAssignmentRow[]>()
 
-    for (const worker of workerRows) {
+    for (const worker of workerProfileRows) {
       const department = worker.department?.trim()
       if (!department) continue
       departmentsSet.add(department)
@@ -144,17 +159,17 @@ export default function AuthoritiesPage() {
     }
 
     for (const complaint of complaintRows) {
-      if (!complaint.assigned_officer_id) continue
-      const bucket = complaintsByOfficer.get(complaint.assigned_officer_id) ?? []
+      if (!complaint.assigned_worker_id) continue
+      const bucket = complaintsByWorker.get(complaint.assigned_worker_id) ?? []
       bucket.push(complaint)
-      complaintsByOfficer.set(complaint.assigned_officer_id, bucket)
+      complaintsByWorker.set(complaint.assigned_worker_id, bucket)
     }
 
     const todayIsoDate = new Date().toISOString().slice(0, 10)
 
-    const nextAuthorities = profileRows
+    const nextWorkers = profileRows
       .map((profile) => {
-        const personComplaints = complaintsByOfficer.get(profile.id) ?? []
+        const personComplaints = complaintsByWorker.get(profile.id) ?? []
         const activeTickets = personComplaints.filter((row) => isActiveStatus(row.status)).length
 
         const resolvedToday = personComplaints.filter(
@@ -172,7 +187,7 @@ export default function AuthoritiesPage() {
 
         return {
           id: profile.id,
-          fullName: profile.full_name || "Unnamed authority",
+          fullName: profile.full_name || "Unnamed worker",
           email: profile.email,
           phone: profile.phone,
           city: profile.city,
@@ -192,24 +207,24 @@ export default function AuthoritiesPage() {
         return a.fullName.localeCompare(b.fullName)
       })
 
-    setAuthorities(nextAuthorities)
+    setWorkers(nextWorkers)
     setDepartmentOptions(Array.from(departmentsSet).sort((a, b) => a.localeCompare(b)))
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    void fetchAuthorities()
-  }, [fetchAuthorities])
+    void fetchWorkers()
+  }, [fetchWorkers])
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  const filteredAuthorities = useMemo(() => {
+  const filteredWorkers = useMemo(() => {
     const query = search.trim().toLowerCase()
 
-    return authorities.filter((item) => {
+    return workers.filter((item) => {
       const departmentMatch = departmentFilter === "all" || item.department === departmentFilter
       if (!departmentMatch) return false
       if (!query) return true
@@ -221,14 +236,14 @@ export default function AuthoritiesPage() {
 
       return haystack.includes(query)
     })
-  }, [authorities, departmentFilter, search])
+  }, [workers, departmentFilter, search])
 
   const headerStats = useMemo(() => {
-    const totalAuthorities = authorities.length
-    const operationalCount = authorities.filter((item) => !item.isBlocked).length
-    const attentionCount = authorities.filter((item) => item.workload === "overloaded").length
+    const totalAuthorities = workers.length
+    const operationalCount = workers.filter((item) => !item.isBlocked).length
+    const attentionCount = workers.filter((item) => item.workload === "overloaded").length
 
-    const withAverage = authorities.filter((item) => item.avgResolutionDays > 0)
+    const withAverage = workers.filter((item) => item.avgResolutionDays > 0)
     const averageResolutionDays =
       withAverage.length > 0
         ? withAverage.reduce((sum, item) => sum + item.avgResolutionDays, 0) / withAverage.length
@@ -240,15 +255,15 @@ export default function AuthoritiesPage() {
       attentionCount,
       averageResolutionDays,
     }
-  }, [authorities])
+  }, [workers])
 
-  const openAssignDepartment = useCallback((authority: AuthorityRecord) => {
-    setAssignAuthority(authority)
-    setDepartmentDraft(authority.department ?? "")
+  const openAssignDepartment = useCallback((worker: AuthorityRecord) => {
+    setAssignWorker(worker)
+    setDepartmentDraft(worker.department ?? "")
   }, [])
 
   const submitDepartmentAssignment = useCallback(async () => {
-    if (!assignAuthority || !departmentDraft) return
+    if (!assignWorker || !departmentDraft) return
 
     setSaving(true)
     setError(null)
@@ -264,13 +279,13 @@ export default function AuthoritiesPage() {
       return
     }
 
-    const response = await fetch("/api/admin/authorities", {
+    const response = await fetch("/api/admin/workers", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ authority_id: assignAuthority.id, department: departmentDraft }),
+      body: JSON.stringify({ worker_id: assignWorker.id, department: departmentDraft }),
     })
 
     const payload = (await response.json().catch(() => null)) as { error?: string } | null
@@ -281,31 +296,31 @@ export default function AuthoritiesPage() {
       return
     }
 
-    setAssignAuthority(null)
-    await fetchAuthorities()
+    setAssignWorker(null)
+    await fetchWorkers()
     setSaving(false)
-  }, [assignAuthority, departmentDraft, fetchAuthorities])
+  }, [assignWorker, departmentDraft, fetchWorkers])
 
-  const openCreateAuthority = useCallback(() => {
-    setNewAuthorityName("")
-    setNewAuthorityEmail("")
-    setNewAuthorityPhone("")
-    setNewAuthorityCity("")
-    setNewAuthorityDepartment("")
-    setNewAuthorityPassword("")
+  const openCreateWorker = useCallback(() => {
+    setNewWorkerName("")
+    setNewWorkerEmail("")
+    setNewWorkerPhone("")
+    setNewWorkerCity("")
+    setNewWorkerDepartment("")
+    setNewWorkerPassword("")
     setIsCreateOpen(true)
   }, [])
 
-  const submitCreateAuthority = useCallback(async () => {
-    const name = newAuthorityName.trim()
-    const email = newAuthorityEmail.trim().toLowerCase()
-    const department = newAuthorityDepartment.trim()
-    const phone = newAuthorityPhone.trim()
-    const city = newAuthorityCity.trim()
-    const password = newAuthorityPassword
+  const submitCreateWorker = useCallback(async () => {
+    const name = newWorkerName.trim()
+    const email = newWorkerEmail.trim().toLowerCase()
+    const department = newWorkerDepartment.trim()
+    const phone = newWorkerPhone.trim()
+    const city = newWorkerCity.trim()
+    const password = newWorkerPassword
 
     if (!name || !email || !department) {
-      setError("Name, email and department are required to create an authority profile")
+      setError("Name, email and department are required to create a worker profile")
       return
     }
 
@@ -323,12 +338,12 @@ export default function AuthoritiesPage() {
     } = await supabase.auth.getSession()
 
     if (sessionError || !session?.access_token) {
-      setError("You must be logged in as admin to create an authority")
+      setError("You must be logged in as admin to create a worker")
       setCreating(false)
       return
     }
 
-    const response = await fetch("/api/admin/authorities", {
+    const response = await fetch("/api/admin/workers", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -347,22 +362,22 @@ export default function AuthoritiesPage() {
     const payload = (await response.json().catch(() => null)) as { error?: string } | null
 
     if (!response.ok) {
-      setError(payload?.error || "Failed to create authority account")
+      setError(payload?.error || "Failed to create worker account")
       setCreating(false)
       return
     }
 
     setIsCreateOpen(false)
-    await fetchAuthorities()
+    await fetchWorkers()
     setCreating(false)
   }, [
-    fetchAuthorities,
-    newAuthorityCity,
-    newAuthorityDepartment,
-    newAuthorityEmail,
-    newAuthorityName,
-    newAuthorityPassword,
-    newAuthorityPhone,
+    fetchWorkers,
+    newWorkerCity,
+    newWorkerDepartment,
+    newWorkerEmail,
+    newWorkerName,
+    newWorkerPassword,
+    newWorkerPhone,
   ])
 
   return (
@@ -372,10 +387,10 @@ export default function AuthoritiesPage() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={openCreateAuthority}
+          onClick={openCreateWorker}
           className="rounded-xl bg-[#102d57] px-4 py-2 text-sm font-medium text-white"
         >
-          + Add New Authority
+          + Add New Worker
         </button>
         <button
           type="button"
@@ -393,8 +408,8 @@ export default function AuthoritiesPage() {
       {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
       <AuthoritiesGrid
-        authorities={filteredAuthorities}
-        onView={(authority) => setViewAuthority(authority)}
+        authorities={filteredWorkers}
+        onView={(worker) => setViewWorker(worker)}
         onAssignDepartment={openAssignDepartment}
       />
 
@@ -402,16 +417,16 @@ export default function AuthoritiesPage() {
         <p>Platform Version 3.1 - National Deployment - Government of India</p>
       </div>
 
-      {loading ? <p className="text-sm text-[#5f554c]">Loading authority profiles from Supabase...</p> : null}
+      {loading ? <p className="text-sm text-[#5f554c]">Loading worker profiles from Supabase...</p> : null}
 
-      {viewAuthority ? (
+      {viewWorker ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-xl rounded-2xl border border-[#d6cec3] bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#27211d]">Authority Profile</h2>
+              <h2 className="text-lg font-semibold text-[#27211d]">Worker Profile</h2>
               <button
                 type="button"
-                onClick={() => setViewAuthority(null)}
+                onClick={() => setViewWorker(null)}
                 className="rounded-lg border border-[#d8d0c5] px-2 py-1 text-sm text-[#3f3832]"
               >
                 Close
@@ -419,27 +434,27 @@ export default function AuthoritiesPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-2 text-sm text-[#3a342f] sm:grid-cols-2">
-              <p><span className="font-semibold">Name:</span> {viewAuthority.fullName}</p>
-              <p><span className="font-semibold">Email:</span> {viewAuthority.email}</p>
-              <p><span className="font-semibold">Department:</span> {viewAuthority.department ?? "Unassigned"}</p>
-              <p><span className="font-semibold">City:</span> {viewAuthority.city ?? "-"}</p>
-              <p><span className="font-semibold">Phone:</span> {viewAuthority.phone ?? "-"}</p>
-              <p><span className="font-semibold">Status:</span> {viewAuthority.isBlocked ? "Blocked" : "Active"}</p>
-              <p><span className="font-semibold">Active Tickets:</span> {viewAuthority.activeTickets}</p>
-              <p><span className="font-semibold">Resolved Today:</span> {viewAuthority.resolvedToday}</p>
-              <p><span className="font-semibold">Avg. Resolution:</span> {viewAuthority.avgResolutionDays.toFixed(1)} days</p>
-              <p><span className="font-semibold">Workers in Dept:</span> {viewAuthority.workersCount}</p>
+              <p><span className="font-semibold">Name:</span> {viewWorker.fullName}</p>
+              <p><span className="font-semibold">Email:</span> {viewWorker.email}</p>
+              <p><span className="font-semibold">Department:</span> {viewWorker.department ?? "Unassigned"}</p>
+              <p><span className="font-semibold">City:</span> {viewWorker.city ?? "-"}</p>
+              <p><span className="font-semibold">Phone:</span> {viewWorker.phone ?? "-"}</p>
+              <p><span className="font-semibold">Status:</span> {viewWorker.isBlocked ? "Blocked" : "Active"}</p>
+              <p><span className="font-semibold">Active Tickets:</span> {viewWorker.activeTickets}</p>
+              <p><span className="font-semibold">Resolved Today:</span> {viewWorker.resolvedToday}</p>
+              <p><span className="font-semibold">Avg. Resolution:</span> {viewWorker.avgResolutionDays.toFixed(1)} days</p>
+              <p><span className="font-semibold">Workers in Dept:</span> {viewWorker.workersCount}</p>
             </div>
           </div>
         </div>
       ) : null}
 
-      {assignAuthority ? (
+      {assignWorker ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-2xl border border-[#d6cec3] bg-white p-5 shadow-xl">
             <h2 className="mb-2 text-lg font-semibold text-[#27211d]">Assign Department</h2>
             <p className="mb-4 text-sm text-[#4f463f]">
-              Authority: {assignAuthority.fullName}
+              Worker: {assignWorker.fullName}
             </p>
 
             <label className="mb-4 block">
@@ -461,7 +476,7 @@ export default function AuthoritiesPage() {
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setAssignAuthority(null)}
+                onClick={() => setAssignWorker(null)}
                 className="rounded-lg border border-[#d8d0c5] px-3 py-2 text-sm text-[#3f3832]"
               >
                 Cancel
@@ -483,7 +498,7 @@ export default function AuthoritiesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-xl rounded-2xl border border-[#d6cec3] bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#27211d]">Add New Authority</h2>
+              <h2 className="text-lg font-semibold text-[#27211d]">Add New Worker</h2>
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
@@ -497,8 +512,8 @@ export default function AuthoritiesPage() {
               <label className="block text-sm text-[#2f2924]">
                 <span className="mb-1 block font-medium">Full name</span>
                 <input
-                  value={newAuthorityName}
-                  onChange={(event) => setNewAuthorityName(event.target.value)}
+                  value={newWorkerName}
+                  onChange={(event) => setNewWorkerName(event.target.value)}
                   placeholder="Ramesh Patel"
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 />
@@ -508,9 +523,9 @@ export default function AuthoritiesPage() {
                 <span className="mb-1 block font-medium">Email</span>
                 <input
                   type="email"
-                  value={newAuthorityEmail}
-                  onChange={(event) => setNewAuthorityEmail(event.target.value)}
-                  placeholder="authority@jansamadhan.in"
+                  value={newWorkerEmail}
+                  onChange={(event) => setNewWorkerEmail(event.target.value)}
+                  placeholder="worker@jansamadhan.in"
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 />
               </label>
@@ -518,8 +533,8 @@ export default function AuthoritiesPage() {
               <label className="block text-sm text-[#2f2924]">
                 <span className="mb-1 block font-medium">Phone</span>
                 <input
-                  value={newAuthorityPhone}
-                  onChange={(event) => setNewAuthorityPhone(event.target.value)}
+                  value={newWorkerPhone}
+                  onChange={(event) => setNewWorkerPhone(event.target.value)}
                   placeholder="+91 98xxxxxx"
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 />
@@ -528,8 +543,8 @@ export default function AuthoritiesPage() {
               <label className="block text-sm text-[#2f2924]">
                 <span className="mb-1 block font-medium">City</span>
                 <input
-                  value={newAuthorityCity}
-                  onChange={(event) => setNewAuthorityCity(event.target.value)}
+                  value={newWorkerCity}
+                  onChange={(event) => setNewWorkerCity(event.target.value)}
                   placeholder="Jaipur"
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 />
@@ -539,18 +554,18 @@ export default function AuthoritiesPage() {
                 <span className="mb-1 block font-medium">Default password</span>
                 <input
                   type="password"
-                  value={newAuthorityPassword}
-                  onChange={(event) => setNewAuthorityPassword(event.target.value)}
+                  value={newWorkerPassword}
+                  onChange={(event) => setNewWorkerPassword(event.target.value)}
                   placeholder="At least 8 characters"
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 />
               </label>
 
-              <label className="block text-sm text-[#2f2924] sm:col-span-2">
+              <label className="block text-sm text-[#2f2924]">
                 <span className="mb-1 block font-medium">Department</span>
                 <select
-                  value={newAuthorityDepartment}
-                  onChange={(event) => setNewAuthorityDepartment(event.target.value)}
+                  value={newWorkerDepartment}
+                  onChange={(event) => setNewWorkerDepartment(event.target.value)}
                   className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Choose a department</option>
@@ -573,11 +588,11 @@ export default function AuthoritiesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void submitCreateAuthority()}
+                onClick={() => void submitCreateWorker()}
                 disabled={creating}
                 className="rounded-lg bg-[#5c4438] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {creating ? "Creating..." : "Create Authority"}
+                {creating ? "Creating..." : "Create Worker"}
               </button>
             </div>
           </div>

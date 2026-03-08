@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import type { Database } from "@/src/types/database.types"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { Database } from "@/src/types/database.types"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey =
@@ -22,7 +22,7 @@ function getSupabaseAdminClient() {
   })
 }
 
-type CreateAuthorityPayload = {
+type CreateWorkerPayload = {
   full_name?: string
   email?: string
   password?: string
@@ -32,7 +32,7 @@ type CreateAuthorityPayload = {
 }
 
 type AssignDepartmentPayload = {
-  authority_id?: string
+  worker_id?: string
   department?: string
 }
 
@@ -79,29 +79,32 @@ export async function GET(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Server misconfiguration: missing Supabase service role key" }, { status: 500 })
   }
+
   const authResult = await requireAdmin(supabaseAdmin, req)
   if ("error" in authResult) return authResult.error
 
-  const [profilesResult, complaintsResult, workersResult, categoriesResult] = await Promise.all([
+  const [profilesResult, complaintsResult, workerProfilesResult, categoriesResult] = await Promise.all([
     supabaseAdmin
       .from("profiles")
       .select("id, full_name, email, phone, city, department, is_blocked, created_at")
-      .eq("role", "authority")
+      .eq("role", "worker")
       .order("created_at", { ascending: false }),
-    supabaseAdmin.from("complaints").select("id, assigned_officer_id, assigned_department, status, created_at, resolved_at"),
-    supabaseAdmin.from("worker_profiles").select("worker_id, department"),
+    supabaseAdmin.from("complaints").select("id, assigned_worker_id, assigned_department, status, created_at, resolved_at"),
+    supabaseAdmin
+      .from("worker_profiles")
+      .select("worker_id, department, availability, total_resolved"),
     supabaseAdmin.from("categories").select("name, department").eq("is_active", true),
   ])
 
-  const firstError = profilesResult.error || complaintsResult.error || workersResult.error || categoriesResult.error
+  const firstError = profilesResult.error || complaintsResult.error || workerProfilesResult.error || categoriesResult.error
   if (firstError) {
-    return NextResponse.json({ error: firstError.message || "Failed to load authorities data" }, { status: 500 })
+    return NextResponse.json({ error: firstError.message || "Failed to load workers data" }, { status: 500 })
   }
 
   return NextResponse.json({
     profiles: profilesResult.data ?? [],
     complaints: complaintsResult.data ?? [],
-    workers: workersResult.data ?? [],
+    workerProfiles: workerProfilesResult.data ?? [],
     categories: categoriesResult.data ?? [],
   })
 }
@@ -111,30 +114,40 @@ export async function PATCH(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Server misconfiguration: missing Supabase service role key" }, { status: 500 })
   }
+
   const authResult = await requireAdmin(supabaseAdmin, req)
   if ("error" in authResult) return authResult.error
 
   const body = (await req.json().catch(() => null)) as AssignDepartmentPayload | null
-  const authorityId = body?.authority_id?.trim() ?? ""
+  const workerId = body?.worker_id?.trim() ?? ""
   const department = body?.department?.trim() ?? ""
 
-  if (!authorityId || !department) {
-    return NextResponse.json({ error: "authority_id and department are required" }, { status: 400 })
+  if (!workerId || !department) {
+    return NextResponse.json({ error: "worker_id and department are required" }, { status: 400 })
   }
 
   const { error: profileError } = await supabaseAdmin
     .from("profiles")
     .update({ department })
-    .eq("id", authorityId)
+    .eq("id", workerId)
 
   if (profileError) {
-    return NextResponse.json({ error: profileError.message || "Failed to update authority department" }, { status: 500 })
+    return NextResponse.json({ error: profileError.message || "Failed to update worker department" }, { status: 500 })
   }
+
+  await supabaseAdmin.from("worker_profiles").upsert(
+    {
+      worker_id: workerId,
+      department,
+      availability: "available",
+    },
+    { onConflict: "worker_id" },
+  )
 
   await supabaseAdmin
     .from("complaints")
     .update({ assigned_department: department })
-    .eq("assigned_officer_id", authorityId)
+    .eq("assigned_worker_id", workerId)
     .in("status", ["submitted", "under_review", "assigned", "in_progress", "escalated"])
 
   return NextResponse.json({ success: true })
@@ -145,10 +158,11 @@ export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Server misconfiguration: missing Supabase service role key" }, { status: 500 })
   }
+
   const authResult = await requireAdmin(supabaseAdmin, req)
   if ("error" in authResult) return authResult.error
 
-  const body = (await req.json().catch(() => null)) as CreateAuthorityPayload | null
+  const body = (await req.json().catch(() => null)) as CreateWorkerPayload | null
   const fullName = body?.full_name?.trim() ?? ""
   const email = body?.email?.trim().toLowerCase() ?? ""
   const password = body?.password ?? ""
@@ -168,22 +182,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 })
   }
 
+  // Keep auth user creation payload minimal to avoid metadata-trigger failures in some Supabase setups.
   const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: {
-      full_name: fullName,
-      role: "authority",
-      department,
-    },
   })
 
   if (createUserError || !createdUser.user) {
-    return NextResponse.json({ error: createUserError?.message || "Failed to create auth user" }, { status: 400 })
+    const message = createUserError?.message || "Failed to create auth user"
+    const help =
+      message.toLowerCase().includes("database error creating new user")
+        ? "Supabase auth trigger failed while creating user. Check auth->profiles trigger and required columns."
+        : undefined
+
+    return NextResponse.json({ error: message, details: help }, { status: 400 })
   }
 
   const userId = createdUser.user.id
+
+  // Best effort metadata update for downstream role checks and auditing.
+  await supabaseAdmin.auth.admin.updateUserById(userId, {
+    user_metadata: {
+      full_name: fullName,
+      role: "worker",
+      department,
+    },
+  })
 
   const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
     {
@@ -193,7 +218,7 @@ export async function POST(req: NextRequest) {
       phone,
       city,
       department,
-      role: "authority",
+      role: "worker",
       is_blocked: false,
     },
     { onConflict: "id" },
@@ -201,7 +226,22 @@ export async function POST(req: NextRequest) {
 
   if (profileError) {
     await supabaseAdmin.auth.admin.deleteUser(userId)
-    return NextResponse.json({ error: profileError.message || "Failed to create authority profile" }, { status: 500 })
+    return NextResponse.json({ error: profileError.message || "Failed to create worker profile" }, { status: 500 })
+  }
+
+  const { error: workerProfileError } = await supabaseAdmin.from("worker_profiles").upsert(
+    {
+      worker_id: userId,
+      department,
+      city: city || "Unknown",
+      availability: "available",
+    },
+    { onConflict: "worker_id" },
+  )
+
+  if (workerProfileError) {
+    await supabaseAdmin.auth.admin.deleteUser(userId)
+    return NextResponse.json({ error: workerProfileError.message || "Failed to create worker details" }, { status: 500 })
   }
 
   return NextResponse.json(
@@ -209,7 +249,7 @@ export async function POST(req: NextRequest) {
       id: userId,
       email,
       full_name: fullName,
-      role: "authority",
+      role: "worker",
       department,
     },
     { status: 201 },
