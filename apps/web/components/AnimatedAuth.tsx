@@ -193,7 +193,12 @@ export default function AnimatedAuth({
   });
   const verifyData = await verifyRes.json();
   if (!verifyData.success) {
-    setError('reCAPTCHA verification failed. Please try again.');
+    const errorCodes = Array.isArray(verifyData.errorCodes) ? verifyData.errorCodes.join(', ') : '';
+    setError(
+      errorCodes
+        ? `reCAPTCHA verification failed (${errorCodes}). Check site/secret key pair and allowed domains in Google reCAPTCHA console.`
+        : 'reCAPTCHA verification failed. Please try again.'
+    );
     recaptchaRef.current?.reset();
     return;
   }
@@ -376,6 +381,12 @@ export default function AnimatedAuth({
               theme={isDark ? 'dark' : 'light'}
               size="normal"
               className="mt-4"
+              onExpired={() => {
+                setError('reCAPTCHA expired. Please complete it again.');
+              }}
+              onErrored={() => {
+                setError('reCAPTCHA widget error. This usually means the site key is invalid for this domain or key type.');
+              }}
             />
           ) : (
             <p className="mt-4 text-xs text-red-300">
