@@ -15,23 +15,40 @@ type CategoryRelation = {
 }
 
 type ProfileRelation = {
+  id: string
   full_name: string | null
   department: string | null
 }
 
-type TicketRow = {
+type ComplaintRow = {
   id: string
   ticket_id: string
   title: string
+  category_id: number
   address_text: string | null
   ward_name: string | null
   city: string
   status: Enums<"complaint_status">
   severity: Enums<"severity_level">
+  escalation_level: number
   created_at: string
   assigned_department: string | null
+  assigned_worker_id: string | null
+  assigned_officer_id: string | null
   categories: CategoryRelation | CategoryRelation[] | null
-  authority: ProfileRelation | ProfileRelation[] | null
+}
+
+type WorkerOption = {
+  id: string
+  name: string
+  department: string | null
+  availability: string
+}
+
+type WorkerRow = {
+  worker_id: string
+  department: string
+  availability: string
   worker: ProfileRelation | ProfileRelation[] | null
 }
 
@@ -40,23 +57,31 @@ type Option = {
   value: string
 }
 
+type CategoryOption = {
+  id: number
+  name: string
+}
+
+type AdminComplaintsResponse = {
+  items: ComplaintRow[]
+  profiles: ProfileRelation[]
+  totalCount: number
+  error?: string
+}
+
 function firstRelation<T>(value: T | T[] | null): T | null {
   if (!value) return null
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
-function normalizeTicket(row: TicketRow): TicketRecord {
+function normalizeTicket(row: ComplaintRow, profilesById: Record<string, ProfileRelation>): TicketRecord {
   const category = firstRelation(row.categories)
-  const authorityProfile = firstRelation(row.authority)
-  const workerProfile = firstRelation(row.worker)
+  const authorityProfile = row.assigned_officer_id ? profilesById[row.assigned_officer_id] : undefined
+  const workerProfile = row.assigned_worker_id ? profilesById[row.assigned_worker_id] : undefined
 
   const location = [row.ward_name, row.address_text, row.city].filter(Boolean).join(", ") || "Location unavailable"
 
-  const authority =
-    row.assigned_department ??
-    authorityProfile?.department ??
-    authorityProfile?.full_name ??
-    "Unassigned"
+  const authority = row.assigned_department ?? authorityProfile?.department ?? authorityProfile?.full_name ?? "Unassigned"
 
   return {
     id: row.id,
@@ -66,6 +91,8 @@ function normalizeTicket(row: TicketRow): TicketRecord {
     location,
     status: row.status,
     severity: row.severity,
+    escalationLevel: row.escalation_level,
+    assignedWorkerId: row.assigned_worker_id,
     createdAt: row.created_at,
     authority,
     worker: workerProfile?.full_name ?? "Unassigned",
@@ -96,7 +123,14 @@ export default function TicketsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [now, setNow] = useState(() => new Date())
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<CategoryOption[]>([])
+  const [workers, setWorkers] = useState<WorkerOption[]>([])
+  const [selectedTicket, setSelectedTicket] = useState<TicketRecord | null>(null)
+  const [isViewOpen, setIsViewOpen] = useState(false)
+  const [isAssignOpen, setIsAssignOpen] = useState(false)
+  const [assignWorkerId, setAssignWorkerId] = useState("")
   const [categoryOptions, setCategoryOptions] = useState<Option[]>([
     { label: "All", value: "all" },
     ...categoryExamples.map((name) => ({ label: name, value: name })),
@@ -108,14 +142,17 @@ export default function TicketsPage() {
 
   const loadFilterOptions = useCallback(async () => {
     const [{ data: categoriesData }, { data: departmentsData }] = await Promise.all([
-      supabase.from("categories").select("name").eq("is_active", true).order("name", { ascending: true }),
+      supabase.from("categories").select("id, name").eq("is_active", true).order("name", { ascending: true }),
       supabase.from("complaints").select("assigned_department").not("assigned_department", "is", null).limit(500),
     ])
+
+    const safeCategories: CategoryOption[] = (categoriesData ?? []).map((entry) => ({ id: entry.id, name: entry.name }))
+    setCategories(safeCategories)
 
     const categoryNames = new Set<string>(categoryExamples)
     const authorities = new Set<string>(authorityExamples)
 
-    for (const item of categoriesData ?? []) {
+    for (const item of safeCategories) {
       if (item.name) categoryNames.add(item.name)
     }
 
@@ -125,98 +162,200 @@ export default function TicketsPage() {
 
     setCategoryOptions([
       { label: "All", value: "all" },
-      ...Array.from(categoryNames).sort((a, b) => a.localeCompare(b)).map((name) => ({ label: name, value: name })),
+      ...Array.from(categoryNames)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ label: name, value: name })),
     ])
 
     setAuthorityOptions([
       { label: "All", value: "all" },
-      ...Array.from(authorities).sort((a, b) => a.localeCompare(b)).map((name) => ({ label: name, value: name })),
+      ...Array.from(authorities)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ label: name, value: name })),
     ])
+  }, [])
+
+  const loadWorkers = useCallback(async () => {
+    const { data, error: workersError } = await supabase
+      .from("worker_profiles")
+      .select("worker_id, department, availability, worker:profiles!worker_profiles_worker_id_fkey(id, full_name, department)")
+      .order("joined_at", { ascending: false })
+
+    if (workersError) {
+      return
+    }
+
+    const normalized = (data ?? []).map((entry) => {
+      const row = entry as unknown as WorkerRow
+      const workerProfile = firstRelation(row.worker)
+      return {
+        id: row.worker_id,
+        name: workerProfile?.full_name ?? "Unnamed worker",
+        department: row.department ?? workerProfile?.department ?? null,
+        availability: row.availability,
+      }
+    })
+
+    setWorkers(normalized)
   }, [])
 
   const fetchTickets = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    const trimmedSearch = search.trim()
-    const rangeFrom = (page - 1) * PAGE_SIZE
-    const rangeTo = rangeFrom + PAGE_SIZE - 1
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+      search: search.trim(),
+      status: filters.status,
+      priority: filters.priority,
+      authority: filters.authority,
+      category: filters.category,
+    })
 
-    let query = supabase
-      .from("complaints")
-      .select(
-        "id, ticket_id, title, address_text, ward_name, city, status, severity, created_at, assigned_department, categories(name), authority:profiles!complaints_assigned_officer_id_fkey(full_name, department), worker:profiles!complaints_assigned_worker_id_fkey(full_name, department)",
-        { count: "exact" },
-      )
-      .order("created_at", { ascending: false })
+    const response = await fetch(`/api/admin/complaints?${query.toString()}`, {
+      method: "GET",
+      cache: "no-store",
+    })
 
-    if (filters.status === "pending") {
-      query = query.in("status", ["submitted", "under_review", "assigned"])
-    } else if (filters.status !== "all") {
-      query = query.eq("status", filters.status)
-    }
+    const payload = (await response.json().catch(() => null)) as AdminComplaintsResponse | null
 
-    if (filters.priority !== "all") {
-      const severity =
-        filters.priority === "low"
-          ? "L1"
-          : filters.priority === "medium"
-            ? "L2"
-            : filters.priority === "high"
-              ? "L3"
-              : "L4"
-      query = query.eq("severity", severity)
-    }
-
-    if (filters.authority !== "all") {
-      query = query.eq("assigned_department", filters.authority)
-    }
-
-    if (trimmedSearch) {
-      const safe = trimmedSearch.replace(/,/g, " ")
-      query = query.or(
-        `ticket_id.ilike.%${safe}%,title.ilike.%${safe}%,address_text.ilike.%${safe}%,ward_name.ilike.%${safe}%,city.ilike.%${safe}%`,
-      )
-    }
-
-    query = query.range(rangeFrom, rangeTo)
-
-    const { data, error: ticketError, count } = await query
-
-    if (ticketError) {
+    if (!response.ok || !payload) {
       setTickets([])
       setTotalCount(0)
-      setError(ticketError.message || "Failed to fetch tickets")
+      setError(payload?.error || "Failed to fetch tickets")
       setLoading(false)
       return
     }
 
-    let nextTickets = (data ?? []).map((row) => normalizeTicket(row as unknown as TicketRow))
+    const complaintRows = payload.items ?? []
+    const profileIds = Array.from(
+      new Set(
+        complaintRows
+          .flatMap((row) => [row.assigned_worker_id, row.assigned_officer_id])
+          .filter((value): value is string => Boolean(value)),
+      ),
+    )
 
-    if (filters.category !== "all") {
-      nextTickets = nextTickets.filter((ticket) => ticket.category === filters.category)
+    const profileMap: Record<string, ProfileRelation> = {}
+
+    if (profileIds.length > 0 && payload.profiles?.length) {
+      for (const profile of payload.profiles) {
+        profileMap[profile.id] = profile
+      }
     }
 
-    if (filters.authority !== "all") {
-      nextTickets = nextTickets.filter((ticket) => ticket.authority === filters.authority)
+    const nextTickets = complaintRows.map((row) => normalizeTicket(row, profileMap))
+
+    setTickets(nextTickets)
+    setTotalCount(payload.totalCount ?? 0)
+    setLoading(false)
+  }, [filters, page, search])
+
+  const handleView = useCallback((ticket: TicketRecord) => {
+    setSelectedTicket(ticket)
+    setIsViewOpen(true)
+  }, [])
+
+  const handleOpenAssign = useCallback((ticket: TicketRecord) => {
+    setSelectedTicket(ticket)
+    setAssignWorkerId(ticket.assignedWorkerId ?? "")
+    setIsAssignOpen(true)
+  }, [])
+
+  const handleEscalate = useCallback(
+    async (ticket: TicketRecord) => {
+      const confirmed = window.confirm(`Escalate complaint ${ticket.ticketId}?`)
+      if (!confirmed) return
+
+      setActionLoading(true)
+      setError(null)
+
+      const { error: updateError } = await supabase
+        .from("complaints")
+        .update({ status: "escalated", escalation_level: (ticket.escalationLevel ?? 0) + 1 })
+        .eq("id", ticket.id)
+
+      if (updateError) {
+        setError(updateError.message || "Failed to escalate complaint")
+        setActionLoading(false)
+        return
+      }
+
+      const { data: authData } = await supabase.auth.getUser()
+      if (authData.user) {
+        await supabase.from("ticket_history").insert({
+          changed_by: authData.user.id,
+          complaint_id: ticket.id,
+          old_status: ticket.status,
+          new_status: "escalated",
+          note: "Escalated from admin complaints dashboard",
+        })
+      }
+
+      await fetchTickets()
+      setActionLoading(false)
+    },
+    [fetchTickets],
+  )
+
+  const handleAssignWorker = useCallback(async () => {
+    if (!selectedTicket || !assignWorkerId) return
+
+    setActionLoading(true)
+    setError(null)
+
+    const selectedWorker = workers.find((worker) => worker.id === assignWorkerId) ?? null
+    const nextStatus =
+      selectedTicket.status === "submitted" || selectedTicket.status === "under_review"
+        ? "assigned"
+        : selectedTicket.status
+
+    const payload: {
+      assigned_worker_id: string
+      status: Enums<"complaint_status">
+      assigned_department?: string
+    } = {
+      assigned_worker_id: assignWorkerId,
+      status: nextStatus,
     }
 
-    if (trimmedSearch) {
-      const token = trimmedSearch.toLowerCase()
-      nextTickets = nextTickets.filter((ticket) => {
-        const blob = `${ticket.ticketId} ${ticket.title} ${ticket.location} ${ticket.category}`.toLowerCase()
-        return blob.includes(token)
+    if (selectedWorker?.department) {
+      payload.assigned_department = selectedWorker.department
+    }
+
+    const { error: updateError } = await supabase.from("complaints").update(payload).eq("id", selectedTicket.id)
+
+    if (updateError) {
+      setError(updateError.message || "Failed to assign worker")
+      setActionLoading(false)
+      return
+    }
+
+    const { data: authData } = await supabase.auth.getUser()
+    if (authData.user) {
+      await supabase.from("ticket_history").insert({
+        changed_by: authData.user.id,
+        complaint_id: selectedTicket.id,
+        old_status: selectedTicket.status,
+        new_status: nextStatus,
+        note: `Assigned worker from admin complaints dashboard (${assignWorkerId})`,
       })
     }
 
-    setTickets(nextTickets)
-    setTotalCount(count ?? 0)
-    setLoading(false)
-  }, [filters, page, search])
+    setIsAssignOpen(false)
+    setSelectedTicket(null)
+    await fetchTickets()
+    setActionLoading(false)
+  }, [assignWorkerId, fetchTickets, selectedTicket, workers])
 
   useEffect(() => {
     void loadFilterOptions()
   }, [loadFilterOptions])
+
+  useEffect(() => {
+    void loadWorkers()
+  }, [loadWorkers])
 
   useEffect(() => {
     void fetchTickets()
@@ -256,7 +395,13 @@ export default function TicketsPage() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : null}
 
-      <TicketsTable tickets={tickets} />
+      <TicketsTable
+        tickets={tickets}
+        actionLoading={actionLoading}
+        onView={handleView}
+        onAssign={handleOpenAssign}
+        onEscalate={handleEscalate}
+      />
 
       <Pagination page={page} totalPages={totalPages} totalCount={totalCount} pageSize={PAGE_SIZE} onPageChange={setPage} />
 
@@ -269,6 +414,78 @@ export default function TicketsPage() {
       ) : (
         <p className="text-sm text-[#5f554c]">Data synced from Supabase.</p>
       )}
+
+      {isViewOpen && selectedTicket ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-[#d6cec3] bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[#27211d]">Ticket Details</h2>
+              <button
+                type="button"
+                onClick={() => setIsViewOpen(false)}
+                className="rounded-lg border border-[#d8d0c5] px-2 py-1 text-sm text-[#3f3832]"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 text-sm text-[#3a342f] sm:grid-cols-2">
+              <p><span className="font-semibold">Ticket ID:</span> {selectedTicket.ticketId}</p>
+              <p><span className="font-semibold">Status:</span> {selectedTicket.status}</p>
+              <p><span className="font-semibold">Title:</span> {selectedTicket.title}</p>
+              <p><span className="font-semibold">Priority:</span> {selectedTicket.severity}</p>
+              <p><span className="font-semibold">Category:</span> {selectedTicket.category}</p>
+              <p><span className="font-semibold">Authority:</span> {selectedTicket.authority}</p>
+              <p><span className="font-semibold">Worker:</span> {selectedTicket.worker}</p>
+              <p><span className="font-semibold">Created:</span> {new Date(selectedTicket.createdAt).toLocaleString("en-IN")}</p>
+              <p className="sm:col-span-2"><span className="font-semibold">Location:</span> {selectedTicket.location}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isAssignOpen && selectedTicket ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-[#d6cec3] bg-white p-5 shadow-xl">
+            <h2 className="mb-2 text-lg font-semibold text-[#27211d]">Assign Worker</h2>
+            <p className="mb-4 text-sm text-[#4f463f]">Ticket: {selectedTicket.ticketId}</p>
+
+            <label className="mb-4 block">
+              <span className="mb-1 block text-sm font-medium text-[#2f2924]">Select worker</span>
+              <select
+                value={assignWorkerId}
+                onChange={(event) => setAssignWorkerId(event.target.value)}
+                className="w-full rounded-lg border border-[#d8d0c5] bg-white px-3 py-2 text-sm text-[#312b26]"
+              >
+                <option value="">Choose a worker</option>
+                {workers.map((worker) => (
+                  <option key={worker.id} value={worker.id}>
+                    {worker.name} | {worker.department ?? "No department"} | {worker.availability}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAssignOpen(false)}
+                className="rounded-lg border border-[#d8d0c5] px-3 py-2 text-sm text-[#3f3832]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAssignWorker()}
+                disabled={!assignWorkerId || actionLoading}
+                className="rounded-lg bg-[#5c4438] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {actionLoading ? "Assigning..." : "Assign Worker"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -3,6 +3,10 @@ import type { TicketRecord } from "@/components/admin-tickets/types"
 
 type TicketsTableProps = {
   tickets: TicketRecord[]
+  actionLoading?: boolean
+  onView: (ticket: TicketRecord) => void
+  onAssign: (ticket: TicketRecord) => void
+  onEscalate: (ticket: TicketRecord) => void
 }
 
 const headers = [
@@ -18,7 +22,13 @@ const headers = [
   "Actions",
 ]
 
-export default function TicketsTable({ tickets }: TicketsTableProps) {
+export default function TicketsTable({
+  tickets,
+  actionLoading = false,
+  onView,
+  onAssign,
+  onEscalate,
+}: TicketsTableProps) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm">
       <table className="min-w-[1080px] w-full border-collapse">
@@ -39,7 +49,16 @@ export default function TicketsTable({ tickets }: TicketsTableProps) {
               </td>
             </tr>
           ) : (
-            tickets.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)
+            tickets.map((ticket) => (
+              <TicketRow
+                key={ticket.id}
+                ticket={ticket}
+                actionLoading={actionLoading}
+                onView={onView}
+                onAssign={onAssign}
+                onEscalate={onEscalate}
+              />
+            ))
           )}
         </tbody>
       </table>

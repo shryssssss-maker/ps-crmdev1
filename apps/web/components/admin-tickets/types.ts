@@ -21,6 +21,8 @@ export type TicketRecord = {
   location: string
   status: ComplaintStatus
   severity: SeverityLevel
+  escalationLevel: number
+  assignedWorkerId: string | null
   createdAt: string
   authority: string
   worker: string
