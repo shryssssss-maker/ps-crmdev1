@@ -24,7 +24,7 @@ export default function HomePage() {
             <div className="relative z-10 max-w-xl pt-10 lg:pt-16">
               <AnimatedText
                 as="h1"
-                text="Map Design"
+                text="The Centralized Digital Command Center"
                 className="text-5xl font-bold tracking-tight md:text-6xl"
               />
 
@@ -32,7 +32,7 @@ export default function HomePage() {
 
               <AnimatedText
                 as="p"
-                text="Map data visualization will be widely used in various industries and will play a powerful role in the future."
+                text="Empowering communities with a smart Public Service CRM. Seamlessly organize citizen complaints, automate administrative workflows, and track resolution progress on a live interactive map."
                 className="mt-6 max-w-md text-xl leading-relaxed"
                 animationDelay={0.35}
               />

@@ -18,8 +18,8 @@ export interface FadedTextProps {
 }
 
 const defaultTheme: FadedTheme = {
-  light: { text: "#b8ada1" },
-  dark: { text: "#2a221c" },
+  light: { text: "#8e857c" },
+  dark: { text: "#ddd1c0" },
 };
 
 export default function FadedText({
