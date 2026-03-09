@@ -6,7 +6,6 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 // lucide icons for social links and theme toggle
-import { X, Linkedin, Github } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 import ThemeToggle from "./Themetogglebutton";
 import LoginButton3D from "./Loginbutton";
@@ -35,7 +34,6 @@ export interface HeaderProps {
   logoText?: string;
   avatarSrc?: string;
   navLinks?: { label: string; href: string }[];
-  socialLinks?: { id: string; icon: React.ReactNode; href: string }[];
   themeColors?: HeaderTheme;
 }
 
@@ -62,23 +60,6 @@ export default function Header({
     { label: "EVENTS", href: "/events" },
     { label: "BLOGS", href: "/blogs" },
     { label: "ABOUT", href: "/about" },
-  ],
-  socialLinks = [
-    {
-      id: "github",
-      href: "#",
-      icon: <Github className="w-4 h-4" />,
-    },
-    {
-      id: "x",
-      href: "#",
-      icon: <X className="w-4 h-4" />,
-    },
-    {
-      id: "linkedin",
-      href: "#",
-      icon: <Linkedin className="w-4 h-4" />,
-    },
   ],
   themeColors = defaultTheme,
 }: HeaderProps) {
@@ -143,18 +124,6 @@ export default function Header({
               {logoText}
             </span>
           </div>
-          
-          <div className="hidden sm:flex items-center gap-4 border-l border-current pl-6 opacity-80">
-            {socialLinks.map((social) => (
-              <Link
-                key={social.id}
-                href={social.href}
-                className="hover:opacity-60 transition-opacity"
-              >
-                {social.icon}
-              </Link>
-            ))}
-          </div>
         </div>
 
         {/* Right Side: Desktop Nav (links + login) */}
@@ -202,13 +171,6 @@ export default function Header({
           ))}
           <div className="mt-4">
             <LoginButton3D onClick={() => (window.location.href = "/login")} />
-          </div>
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t border-current/20">
-             {socialLinks.map((social) => (
-              <Link key={social.id} href={social.href}>
-                {social.icon}
-              </Link>
-            ))}
           </div>
         </div>
       )}
