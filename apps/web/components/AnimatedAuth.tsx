@@ -193,12 +193,11 @@ export default function AnimatedAuth({
   });
   const verifyData = await verifyRes.json();
   if (!verifyData.success) {
-    const errorCodes = Array.isArray(verifyData.errorCodes) ? verifyData.errorCodes.join(', ') : '';
-    setError(
-      errorCodes
-        ? `reCAPTCHA verification failed (${errorCodes}). Check site/secret key pair and allowed domains in Google reCAPTCHA console.`
-        : 'reCAPTCHA verification failed. Please try again.'
-    );
+    const message =
+      typeof verifyData.message === 'string' && verifyData.message.trim().length > 0
+        ? verifyData.message
+        : 'reCAPTCHA verification failed. Please try again.';
+    setError(message);
     recaptchaRef.current?.reset();
     return;
   }
