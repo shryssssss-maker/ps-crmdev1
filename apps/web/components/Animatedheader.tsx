@@ -67,12 +67,47 @@ export default function Header({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { theme } = useTheme();
 
-  const isDarkMode = theme === "dark";
+  // Determine the resolved theme directly from the DOM so we never flash the wrong
+  // colour during the SSR→hydration→useEffect cycle.  The inline <head> script has
+  // already set the correct class before any JS runs, so this is always accurate.
+  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      return document.documentElement.classList.contains("dark") ? "dark" : "light";
+    }
+    return "dark";
+  });
+
+  // Keep resolvedTheme in sync whenever ThemeProvider toggles the theme.
+  useEffect(() => {
+    setResolvedTheme(theme);
+  }, [theme]);
+
+  const isDarkMode = resolvedTheme === "dark";
   const currentTheme = isDarkMode ? themeColors.dark : themeColors.light;
+
+  // One-time entrance animation — slides the header in from above on mount.
+  // Starting opacity:0 is set directly on the element (style prop below) to
+  // prevent any flash before this effect runs.
+  useGSAP(() => {
+    if (!headerRef.current) return;
+    gsap.fromTo(
+      headerRef.current,
+      { y: -80, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.8, delay: 0.1, ease: "power3.out" }
+    );
+  }, []);
 
   // 2. GSAP Animation for scroll color change
   useGSAP(() => {
     if (!headerRef.current) return;
+
+    // Immediately apply the correct background for the current theme so there's
+    // no flash of the wrong colour while the animation is being set up.
+    const atTop = window.scrollY <= 50;
+    gsap.set(headerRef.current, {
+      backgroundColor: atTop ? currentTheme.bgInitial : currentTheme.bgScrolled,
+      color: atTop ? currentTheme.textInitial : currentTheme.textScrolled,
+    });
 
     const anim = gsap.fromTo(
       headerRef.current,
@@ -94,17 +129,23 @@ export default function Header({
       anim.progress(1);
     }
 
-    ScrollTrigger.create({
+    const st = ScrollTrigger.create({
       start: 50,
       onEnter: () => anim.play(),
       onLeaveBack: () => anim.reverse(),
     });
+
+    return () => {
+      st.kill();
+      anim.kill();
+    };
   }, [currentTheme]);
 
   return (
     <header
       ref={headerRef}
       className="fixed top-0 left-0 w-full z-50 transition-colors duration-300 shadow-sm"
+      style={{ opacity: 0 }}
     >
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         
