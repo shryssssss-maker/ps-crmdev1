@@ -5,6 +5,7 @@ import FadedText from "@/components/Fadedtext";
 import AnimatedText from "@/components/Animatedtext";
 import DecorativeLine from "@/components/Decorativeline";
 import MapVisual from "@/components/Mapvisual";
+import PhoneMockup from "@/components/PhoneMockup";
 import { MegaFooter } from "@/components/MegaFooter";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -75,26 +76,43 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* third full screen page with Connect */}
+      {/* third full screen page – Citizen Impact & Transparency */}
       <section className="relative flex min-h-screen items-center px-6 py-16 lg:px-20 lg:py-10">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-10 lg:flex-row lg:items-center lg:gap-16">
-          <div className="relative order-1 w-full lg:w-1/2">
-            <FadedText text="Connect" animateOnScroll className="absolute -top-8 left-0 text-6xl md:text-8xl lg:text-9xl" />
+          {/* Left column – text content */}
+          <div className="relative order-2 w-full lg:order-1 lg:w-1/2">
+            <FadedText text="Impact" animateOnScroll className="absolute -top-8 left-0 text-6xl md:text-8xl lg:text-9xl" />
             <div className="relative z-10 pt-10 lg:pt-16">
               <AnimatedText
                 as="h2"
-                text="Connect People"
+                text="Citizen Impact and Transparency"
                 className="text-4xl font-bold tracking-tight md:text-5xl"
                 animateOnScroll
               />
+
+              <DecorativeLine width="w-24" className="mt-6" />
+
+              <AnimatedText
+                as="h3"
+                text="Building Trust through Accountability"
+                className="mt-6 text-2xl font-semibold tracking-tight md:text-3xl"
+                animationDelay={0.25}
+                animateOnScroll
+              />
+
               <AnimatedText
                 as="p"
-                text="Bridge the gap between citizens and services through real-time communication and data."
-                className="mt-6 max-w-md text-xl leading-relaxed"
-                animationDelay={0.2}
+                text="The mobile app through consetul nodr grievance resolutions, vote single grievance ticket's a vision and its centerpiece convenience specialized, victim this convenient amid organism of purposed facet, and outlet reproduction and bendolke communities, events this brands thereup and adornity."
+                className="mt-6 max-w-md text-base leading-relaxed opacity-80"
+                animationDelay={0.35}
                 animateOnScroll
               />
             </div>
+          </div>
+
+          {/* Right column – phone mockup */}
+          <div className="order-1 flex w-full items-center justify-center lg:order-2 lg:w-1/2">
+            <PhoneMockup />
           </div>
         </div>
       </section>
