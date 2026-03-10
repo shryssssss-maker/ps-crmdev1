@@ -30,11 +30,11 @@ const COMPLAINT_SELECT =
 const TREND_SELECT = "status, created_at, resolved_at"
 
 export default function AuthorityDashboardPage() {
-  const [complaints,  setComplaints]  = useState<AuthorityComplaintRow[]>([])
-  const [workers,     setWorkers]     = useState<WorkerOption[]>([])
-  const [monthTrend,  setMonthTrend]  = useState<TrendPoint[]>([])
-  const [weekTrend,   setWeekTrend]   = useState<TrendPoint[]>([])
-  const [stats,       setStats]       = useState<DashboardStats>({
+  const [complaints, setComplaints] = useState<AuthorityComplaintRow[]>([])
+  const [workers,    setWorkers]    = useState<WorkerOption[]>([])
+  const [monthTrend, setMonthTrend] = useState<TrendPoint[]>([])
+  const [weekTrend,  setWeekTrend]  = useState<TrendPoint[]>([])
+  const [stats,      setStats]      = useState<DashboardStats>({
     total: 0, pendingAction: 0, inProgress: 0, resolvedThisMonth: 0, slaBreached: 0,
   })
   const [department, setDepartment] = useState("")
@@ -60,7 +60,7 @@ export default function AuthorityDashboardPage() {
     weekCutoff.setDate(weekCutoff.getDate() - 6)
     weekCutoff.setHours(0, 0, 0, 0)
 
-    let allRows: any[] = []
+    let allRows:   any[] = []
     let trendRows: any[] = []
 
     const [r1, r2] = await Promise.all([
@@ -70,6 +70,7 @@ export default function AuthorityDashboardPage() {
     allRows   = r1.data ?? []
     trendRows = r2.data ?? []
 
+    // Fallback: fetch by department if officer has no direct assignments
     if (allRows.length === 0 && dept) {
       const [r3, r4] = await Promise.all([
         supabase.from("complaints").select(COMPLAINT_SELECT).eq("assigned_department", dept).neq("status", "rejected"),
@@ -94,7 +95,7 @@ export default function AuthorityDashboardPage() {
       department:   w.department ?? dept,
     }))
 
-    // ── Month trend (6 months) ────────────────────────────────────────────────
+    // ── Month trend (6 months) — submitted / assigned / in_progress / resolved ──
     const mBuckets = buildSixMonthBuckets()
     ;(trendRows ?? []).forEach((r: any) => {
       const mk = monthLabel(new Date(r.created_at))
@@ -112,10 +113,10 @@ export default function AuthorityDashboardPage() {
       month, day: month, ...v,
     }))
 
-    // ── Week trend (last 7 days) — use all complaints for granularity ─────────
+    // ── Week trend (last 7 days) ──────────────────────────────────────────────
     const dBuckets = buildDayBuckets(7)
     mappedComplaints.forEach(c => {
-      const d  = new Date(c.created_at)
+      const d = new Date(c.created_at)
       if (d >= weekCutoff) {
         const dk = dayLabel(d)
         if (dBuckets[dk]) {
@@ -144,7 +145,7 @@ export default function AuthorityDashboardPage() {
   useEffect(() => {
     const ch = supabase
       .channel("authority-dashboard-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "complaints"      }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "complaints" },       () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "worker_profiles" }, () => void load())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
@@ -153,16 +154,7 @@ export default function AuthorityDashboardPage() {
   const urgentTickets = getUrgentTickets(complaints)
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"} 👋
-        </h1>
-        <p className="mt-0.5 text-sm text-gray-400">
-          {department ? `${department} · ` : ""}JanSamadhan Control Centre
-        </p>
-      </div>
-
+    <div className="space-y-4">
       <AuthorityStatsCards stats={stats} loading={loading} error={error} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">

@@ -1,14 +1,32 @@
+// apps/web/app/authority/layout.tsx
 'use client'
 
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  BarChart2, Bell, ClipboardList,
-  LayoutGrid, LogOut, Menu, ChevronDown, Users,
+  BarChart2, ChevronDown, ClipboardList,
+  LayoutGrid, LogOut, Menu, Users,
 } from "lucide-react"
 import Sidebar, { defaultSidebarConfig } from "@/components/Sidebar"
 import { supabase } from "@/src/lib/supabase"
 import AuthorityNotificationBell from "@/app/authority/_components/AuthorityNotificationBell"
+
+const PAGE_META: Record<string, { title: string; sub: string }> = {
+  "/authority":         { title: "Authority",         sub: "Overview of department complaints, performance metrics, and recent activity." },
+  "/authority/track":   { title: "Track Complaints",  sub: "Monitor and manage complaints across the city through the live complaint map." },
+  "/authority/workers": { title: "Workers",            sub: "View and manage department field workers and their availability status." },
+  "/authority/reports": { title: "Reports",            sub: "Analyze complaint trends, resolution performance, and SLA compliance." },
+}
+
+function usePageMeta(pathname: string) {
+  const key = Object.keys(PAGE_META)
+    .filter(k => k === "/authority" ? pathname === k : pathname.startsWith(k))
+    .sort((a, b) => b.length - a.length)[0] ?? ""
+  return PAGE_META[key] ?? {
+    title: pathname.split("/").filter(Boolean).slice(-1)[0]?.replace(/-/g, " ") ?? "Dashboard",
+    sub:   "",
+  }
+}
 
 export default function AuthorityLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -16,8 +34,9 @@ export default function AuthorityLayout({ children }: { children: React.ReactNod
   const [profileOpen,   setProfileOpen]   = useState(false)
   const [userName,      setUserName]      = useState("")
   const profileRef = useRef<HTMLDivElement>(null)
-  const pathname = usePathname()
-  const router   = useRouter()
+  const pathname   = usePathname()
+  const router     = useRouter()
+  const pageMeta   = usePageMeta(pathname)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -28,7 +47,6 @@ export default function AuthorityLayout({ children }: { children: React.ReactNod
     })
   }, [])
 
-  // Close profile dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
@@ -74,69 +92,89 @@ export default function AuthorityLayout({ children }: { children: React.ReactNod
         onToggleCollapse={() => setIsCollapsed(c => !c)}
       />
 
-      <div className="flex flex-1 min-w-0 flex-col">
+      <div className="flex flex-1 flex-col min-h-0 min-w-0 max-w-full overflow-x-hidden">
 
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between
-                           border-b border-gray-200 bg-white px-5
+        {/* Topbar — from incoming: taller, with title + subtitle, higher z-index */}
+        <header className="sticky top-0 z-[2100] border-b border-gray-200 bg-white shadow-sm
                            dark:border-gray-800 dark:bg-gray-950">
-          {/* Mobile hamburger */}
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg
-                       bg-[#b4725a] text-white lg:hidden"
-            aria-label="Open menu"
-          >
-            <Menu size={18} />
-          </button>
+          <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6
+                          min-w-0 max-w-full">
 
-          {/* Breadcrumb label */}
-          <p className="hidden lg:block text-sm font-semibold capitalize text-gray-600 dark:text-gray-400">
-            {pathname.split("/").filter(Boolean).slice(-1)[0]?.replace(/-/g, " ") || "Dashboard"}
-          </p>
-
-          {/* Right side: Bell + Profile Avatar */}
-          <div className="flex items-center gap-2">
-            <AuthorityNotificationBell />
-
-            {/* Profile Avatar Dropdown */}
-            <div ref={profileRef} className="relative">
+            {/* Left: hamburger + page title/subtitle */}
+            <div className="flex flex-1 items-center gap-3 min-w-0">
               <button
-                type="button"
-                onClick={() => setProfileOpen(o => !o)}
-                className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white pl-1 pr-2 py-1 shadow-sm hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
-                aria-label="Profile menu"
+                onClick={() => setIsSidebarOpen(true)}
+                className="flex-shrink-0 rounded-md bg-[#b4725a] p-2 text-white
+                           transition-colors hover:bg-[#9a5f4a] lg:hidden"
+                aria-label="Open menu"
               >
-                {/* Avatar circle */}
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#b4725a] text-[11px] font-bold text-white">
-                  {initials}
-                </div>
-                <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
+                <Menu size={20} />
               </button>
 
-              {/* Dropdown */}
-              {profileOpen && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-                  {/* User info */}
-                  <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{userName}</p>
-                    <p className="text-[11px] text-gray-400">Authority Officer</p>
-                  </div>
-                  {/* Logout */}
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <LogOut size={15} />
-                    Logout
-                  </button>
-                </div>
-              )}
+              <div className="flex-1 min-w-0">
+                <h1 className="truncate text-lg font-bold capitalize text-gray-900
+                               dark:text-gray-100 md:text-xl lg:text-2xl">
+                  {pageMeta.title}
+                </h1>
+                {pageMeta.sub && (
+                  <p className="mt-0.5 line-clamp-1 text-xs text-gray-400
+                                dark:text-gray-500 sm:text-sm">
+                    {pageMeta.sub}
+                  </p>
+                )}
+              </div>
             </div>
+
+            {/* Right: bell + profile dropdown */}
+            <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+              <AuthorityNotificationBell />
+
+              <div ref={profileRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen(o => !o)}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200
+                             bg-white py-1 pl-1 pr-2 shadow-sm transition-colors
+                             hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900
+                             dark:hover:bg-gray-800"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full
+                                  bg-[#b4725a] text-[11px] font-bold text-white">
+                    {initials}
+                  </div>
+                  <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
+                </button>
+
+                {profileOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden
+                                  rounded-xl border border-gray-200 bg-white shadow-xl
+                                  dark:border-gray-700 dark:bg-gray-900">
+                    <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                        {userName}
+                      </p>
+                      <p className="text-[11px] text-gray-400">Authority Officer</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium
+                                 text-red-600 transition-colors hover:bg-red-50
+                                 dark:hover:bg-red-900/20"
+                    >
+                      <LogOut size={15} />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </header>
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden
+                         px-4 py-6 sm:px-6">
           {children}
         </main>
 
