@@ -367,6 +367,28 @@ export default function AnimatedAuth({
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!loginEmail.trim()) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setLoading(true);
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      loginEmail.trim(),
+      { redirectTo: `${window.location.origin}/auth/callback` }
+    );
+
+    setLoading(false);
+    if (resetError) {
+      setError(resetError.message);
+    } else {
+      setMessage('Password reset link sent! Check your email.');
+    }
+  };
+
   return (
     <div
       className="flex items-center justify-center min-h-screen p-4 bg-cover bg-center"
@@ -424,6 +446,16 @@ export default function AnimatedAuth({
                 className="absolute right-0 text-xs text-[var(--auth-text-secondary)] hover:text-[var(--auth-text)]"
               >
                 {showLoginPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <div className="flex justify-end mt-1">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs hover:underline transition-colors"
+                style={{ color: activeThemeColor }}
+              >
+                Forgot Password?
               </button>
             </div>
           </div>
