@@ -25,6 +25,10 @@
 
 ---
 
+## 🎬 Demo Video
+
+[![JanSamadhan Demo](https://img.youtube.com/vi/4Mb1QKaJfK8/maxresdefault.jpg)](https://www.youtube.com/watch?v=4Mb1QKaJfK8)
+
 ## 📋 Table of Contents
 
 1. [Problem Statement](#-problem-statement)
