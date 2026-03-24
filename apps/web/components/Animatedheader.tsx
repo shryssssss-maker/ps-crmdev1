@@ -154,7 +154,7 @@ export default function Header({
           <div className="scale-65">
             <ThemeToggle />
           </div>
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity" aria-label="Go to home page">
             <div
               className="w-10 h-10"
               style={{
@@ -172,7 +172,7 @@ export default function Header({
             <span className="font-bold text-lg tracking-wider hidden sm:block">
               {logoText}
             </span>
-          </div>
+          </Link>
         </div>
 
         {/* Right Side: Desktop Nav (links + login) */}
