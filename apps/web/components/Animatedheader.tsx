@@ -34,6 +34,7 @@ export interface HeaderProps {
   logoText?: string;
   navLinks?: { label: string; href: string }[];
   themeColors?: HeaderTheme;
+  hideLoginButton?: boolean;
 }
 
 const defaultTheme: HeaderTheme = {
@@ -60,6 +61,7 @@ export default function Header({
     { label: "ABOUT", href: "/about" },
   ],
   themeColors = defaultTheme,
+  hideLoginButton = false,
 }: HeaderProps) {
   const headerRef = useRef<HTMLElement>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -185,7 +187,9 @@ export default function Header({
               <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-current transition-all duration-300 group-hover:w-full"></span>
             </Link>
           ))}
-          <LoginButton3D className="scale-65" onClick={() => (window.location.href = "/login")} />
+          {!hideLoginButton && (
+            <LoginButton3D className="scale-65" onClick={() => (window.location.href = "/login")} />
+          )}
         </nav>
 
         {/* Mobile Menu Toggle */}
@@ -216,9 +220,11 @@ export default function Header({
                 {link.label}
               </Link>
             ))}
-            <div className="mt-4">
-              <LoginButton3D onClick={() => (window.location.href = "/login")} />
-            </div>
+            {!hideLoginButton && (
+              <div className="mt-4">
+                <LoginButton3D onClick={() => (window.location.href = "/login")} />
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import AnimatedAuth, {
   AUTH_COLORS_DARK,
   AnimatedAuthProps,
 } from "@/components/AnimatedAuth";
+import Animatedheader, { HeaderTheme } from "@/components/Animatedheader";
 
 // exported so other modules/pages can reuse or tweak the login palette
 export const loginAuthColors: Partial<AnimatedAuthProps> = {
@@ -37,8 +38,24 @@ export const loginAuthColors: Partial<AnimatedAuthProps> = {
 };
 
 export default function LoginPage() {
+  const loginHeaderTheme: HeaderTheme = {
+    light: {
+      bgInitial: (loginAuthColors.backgroundColor as string) || "#e4e3e1",
+      bgScrolled: "#4a3c31",
+      textInitial: (loginAuthColors.textColor as string) || "#000000",
+      textScrolled: "#ffffff",
+    },
+    dark: {
+      bgInitial: (loginAuthColors.backgroundColorDark as string) || "#2c241b",
+      bgScrolled: "#110e0c",
+      textInitial: (loginAuthColors.textColorDark as string) || "#ffffff",
+      textScrolled: "#ffffff",
+    },
+  };
+
   return (
     <div className="flex flex-col min-h-screen ">
+      <Animatedheader hideLoginButton={true} themeColors={loginHeaderTheme} />
       <main>
         <AnimatedAuth
           {...loginAuthColors}
