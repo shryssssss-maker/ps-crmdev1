@@ -374,6 +374,7 @@ export default function TicketsPage() {
   }, [totalCount])
 
   return (
+    <section className="flex h-[calc(100vh-10rem)] min-h-[620px] flex-col rounded-2xl border border-[#d8cfbe] bg-[#f4efe5] p-4 text-[#27221d] shadow-sm">
     <section className="space-y-4 rounded-2xl border border-[#d8cfbe] bg-[#f4efe5] p-4 text-[#27221d] shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-100 dark:shadow-none">
       <TicketsHeader now={now} />
       <TicketSearch
@@ -397,20 +398,30 @@ export default function TicketsPage() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>
       ) : null}
 
-      <TicketsTable
-        tickets={tickets}
-        actionLoading={actionLoading}
-        onView={handleView}
-        onAssign={handleOpenAssign}
-        onEscalate={handleEscalate}
-      />
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <TicketsTable
+          tickets={tickets}
+          actionLoading={actionLoading}
+          onView={handleView}
+          onAssign={handleOpenAssign}
+          onEscalate={handleEscalate}
+        />
+      </div>
 
+      <div className="mt-3 shrink-0 border-t border-[#d8cfbe] pt-3">
+        <Pagination page={page} totalPages={totalPages} totalCount={totalCount} pageSize={PAGE_SIZE} onPageChange={setPage} />
       <Pagination page={page} totalPages={totalPages} totalCount={totalCount} pageSize={PAGE_SIZE} onPageChange={setPage} />
 
       <div className="flex justify-end pt-2 text-sm text-[#4b433b] dark:text-gray-400">
         <p>Platform Version 3.1 - National Deployment - Government of India</p>
       </div>
 
+      <footer className="mt-3 shrink-0 border-t border-[#d8cfbe] pt-3 text-sm text-[#5f554c]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p>{loading ? "Loading tickets..." : "Data synced from Supabase."}</p>
+          <p className="text-[#4b433b]">Platform Version 3.1 - National Deployment - Government of India</p>
+        </div>
+      </footer>
       {loading ? (
         <p className="text-sm text-[#5f554c] dark:text-gray-400">Loading tickets...</p>
       ) : (

@@ -22,6 +22,19 @@ const headers = [
   "Actions",
 ]
 
+const columnWidths = [
+  "9rem",   // ID
+  "18rem",  // Title
+  "11rem",  // Category
+  "16rem",  // Location
+  "8rem",   // Status
+  "8rem",   // Priority
+  "9rem",   // Created
+  "12rem",  // Authority
+  "10rem",  // Worker
+  "12rem",  // Actions
+]
+
 export default function TicketsTable({
   tickets,
   actionLoading = false,
@@ -30,6 +43,13 @@ export default function TicketsTable({
   onEscalate,
 }: TicketsTableProps) {
   return (
+    <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm">
+      <table className="w-full min-w-[1130px] table-fixed border-collapse">
+        <colgroup>
+          {columnWidths.map((width, idx) => (
+            <col key={idx} style={{ width }} />
+          ))}
+        </colgroup>
     <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:shadow-none">
       <table className="min-w-[1080px] w-full border-collapse">
         <thead>

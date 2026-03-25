@@ -1,8 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
-  Bell,
   CheckCircle2,
   Clock3,
   Flag,
@@ -63,7 +62,6 @@ export default function AdminStatsOverview() {
   const [stats, setStats] = useState<DashboardStats>(initialStats)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [now, setNow] = useState(() => new Date())
 
   const fetchStats = useCallback(async () => {
     setError(null)
@@ -139,27 +137,6 @@ export default function AdminStatsOverview() {
       clearInterval(statsInterval)
     }
   }, [fetchStats])
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date())
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [])
-
-  const dateTimeText = useMemo(() => {
-    return now.toLocaleString("en-IN", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    })
-  }, [now])
 
   return (
     <section className="space-y-5">
