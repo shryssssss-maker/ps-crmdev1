@@ -27,8 +27,8 @@ import httpx
 from fastapi import APIRouter, Request, Response, HTTPException
 from PIL import Image
 
-# ── reuse everything already defined in main.py ──────────────────────────────
-from main import (
+# ── reuse everything from shared.py (avoids circular import) ────────────────
+from shared import (
     gemini_client,
     supabase,
     GEMINI_PRIMARY_MODEL,
