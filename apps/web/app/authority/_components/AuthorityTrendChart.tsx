@@ -22,12 +22,13 @@ const LINES: { key: keyof Omit<TrendPoint, "label">; label: string; color: strin
   { key: "resolved",    label: "Resolved",    color: "#10b981" },
 ]
 
-type ViewMode = "day" | "week" | "month"
+type ViewMode = "day" | "week" | "last30" | "month"
 
 const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
-  { value: "day",   label: "Today"      },
-  { value: "week",  label: "7 Days"     },
-  { value: "month", label: "6 Months"   },
+  { value: "day",    label: "Today"         },
+  { value: "week",   label: "7 Days"        },
+  { value: "last30", label: "Last 30 Days"  },
+  { value: "month",  label: "6 Months"      },
 ]
 
 function ChartTooltip({ active, payload, label }: any) {
@@ -62,7 +63,7 @@ function ChartSkeleton() {
 }
 
 type Props = {
-  allTrend: { day: TrendPoint[]; week: TrendPoint[]; month: TrendPoint[] }
+  allTrend: { day: TrendPoint[]; week: TrendPoint[]; last30: TrendPoint[]; month: TrendPoint[] }
   department: string
   loading: boolean
 }
@@ -92,7 +93,8 @@ export default function AuthorityTrendChart({ allTrend, department, loading }: P
     : chartData
 
   const xInterval = view === "day" ? 1 :
-                    view === "week" ? 0 : "preserveStartEnd"
+                    view === "week" ? 0 :
+                    view === "last30" ? 2 : "preserveStartEnd"
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
@@ -111,7 +113,7 @@ export default function AuthorityTrendChart({ allTrend, department, loading }: P
             {activeOption.label}
             <ChevronDown size={12} className={`transition-transform ${dropOpen ? "rotate-180" : ""}`} />
           </button>
-          <div className={`absolute right-0 top-full z-50 mt-1 w-32 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 transition-all duration-150 ${dropOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-1 pointer-events-none"}`}>
+          <div className={`absolute right-0 top-full z-50 mt-1 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 transition-all duration-150 ${dropOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-1 pointer-events-none"}`}>
             {VIEW_OPTIONS.map(o => (
               <button
                 key={o.value}
