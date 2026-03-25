@@ -230,11 +230,21 @@ async def handle_location(phone: str, lat: float, lng: float):
             "formatted_address": f"Lat {lat:.5f}, Lng {lng:.5f}", "digipin": ""
         }
 
+    # Route authority using location (so preview matches what gets saved)
+    category = CHILD_CATEGORIES[result["child_id"]]
+    routed_authority = route_authority(
+        issue_type=category["name"],
+        latitude=lat,
+        longitude=lng,
+        location=location,
+        default_authority=category["authority"],
+    )
+
     # Build preview
     preview = {
         "child_id":    result["child_id"],
         "issue_name":  result["issue_name"],
-        "authority":   result["authority"],
+        "authority":   routed_authority,
         "title":       result["title"],
         "description": result["description"],
         "severity":    result["severity"],
@@ -285,13 +295,8 @@ async def confirm_ticket(phone: str, session: dict):
     child_id = preview["child_id"]
     category = CHILD_CATEGORIES[child_id]
 
-    routed_authority = route_authority(
-        issue_type=category["name"],
-        latitude=lat,
-        longitude=lng,
-        location=location,
-        default_authority=category["authority"],
-    )
+    # Use the authority already shown in the preview (computed during handle_location)
+    routed_authority = preview["authority"]
 
     location_wkt  = f"POINT({lng} {lat})"
     address_text  = location.get("formatted_address", f"Lat {lat}, Lng {lng}")
