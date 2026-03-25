@@ -325,8 +325,6 @@ async def confirm_ticket(phone: str, session: dict):
             "sla_breached":        False,
             "escalation_level":    0,
             "upvote_boost":        0,
-            "source":              "whatsapp",          # tag so you know it came from WA
-            "whatsapp_phone":      phone,               # store sender's number
         }).execute()
     except Exception as e:
         await send_text(phone, f"❌ Failed to submit complaint: {e}")
