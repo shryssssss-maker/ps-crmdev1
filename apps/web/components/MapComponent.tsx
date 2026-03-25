@@ -8,11 +8,6 @@ import {
   Popup,
   useMap,
 } from "react-leaflet";
-import dynamic from "next/dynamic";
-const MarkerClusterGroup = dynamic(
-  () => import("react-leaflet-markercluster").then((mod) => mod.default ?? mod),
-  { ssr: false }
-) as React.ComponentType<{ children: React.ReactNode }>;
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/src/lib/supabase";
@@ -28,6 +23,9 @@ type MapComplaint = {
   lat: number;
   lng: number;
 };
+
+const DEFAULT_CENTER: [number, number] = [28.6139, 77.209];
+const DEFAULT_ZOOM = 12;
 
 function parseEwkbHexPoint(hex: string): { lat: number; lng: number } | null {
   const normalized = hex.trim();
@@ -154,8 +152,10 @@ function parseLocationToLatLng(location: unknown): { lat: number; lng: number } 
 
 export default function MapComponent({
   selectedComplaintId,
+  recenterTrigger,
 }: {
   selectedComplaintId?: string | null;
+  recenterTrigger?: number;
 }) {
   const [complaints, setComplaints] = useState<MapComplaint[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -213,8 +213,6 @@ export default function MapComponent({
 
   useEffect(() => {
     setMounted(true);
-    import("react-leaflet-markercluster/styles");
-
     import("leaflet").then((L) => {
       delete (L.Icon.Default.prototype as any)._getIconUrl;
 
@@ -263,7 +261,7 @@ export default function MapComponent({
   };
 
   return (
-    <div style={{ position: "relative", height: "500px", width: "100%" }}>
+    <div style={{ position: "relative", height: "100%", width: "100%" }}>
       <div className="absolute right-4 top-4 z-[1000] flex items-center gap-3 pointer-events-none">
         <button
           onClick={() => setShowHeatmap(!showHeatmap)}
@@ -274,8 +272,9 @@ export default function MapComponent({
       </div>
 
       <MapContainer
-        center={[28.6139, 77.209]}
-        zoom={12}
+        center={DEFAULT_CENTER}
+        zoom={DEFAULT_ZOOM}
+        zoomControl={false}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
@@ -286,29 +285,27 @@ export default function MapComponent({
           complaints={complaints}
           selectedComplaintId={selectedComplaintId}
         />
-        {!showHeatmap && (
-          <MarkerClusterGroup>
-            {complaints.map((c) => (
-              <Marker
-                key={c.id}
-                position={[c.lat, c.lng]}
-                icon={
-                  leaflet
-                    ? getSeverityIcon(c.severity, leaflet)
-                    : undefined
-                }
-              >
-                <Popup>
-                  <strong>{c.title}</strong>
-                  <br />
-                  {c.description}
-                  <br />
-                  <b>Severity:</b> {c.severity}
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
-        )}
+        <ResetToDefaultView recenterTrigger={recenterTrigger} />
+        {!showHeatmap &&
+          complaints.map((c) => (
+            <Marker
+              key={c.id}
+              position={[c.lat, c.lng]}
+              icon={
+                leaflet
+                  ? getSeverityIcon(c.severity, leaflet)
+                  : undefined
+              }
+            >
+              <Popup>
+                <strong>{c.title}</strong>
+                <br />
+                {c.description}
+                <br />
+                <b>Severity:</b> {c.severity}
+              </Popup>
+            </Marker>
+          ))}
 
         {showHeatmap && <HeatmapLayer complaints={complaints} />}
       </MapContainer>
@@ -352,6 +349,17 @@ export default function MapComponent({
       )}
     </div>
   );
+}
+
+function ResetToDefaultView({ recenterTrigger }: { recenterTrigger?: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!recenterTrigger) return;
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true });
+  }, [recenterTrigger, map]);
+
+  return null;
 }
 
 function HeatmapLayer({ complaints }: { complaints: any[] }) {

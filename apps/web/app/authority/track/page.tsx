@@ -90,6 +90,7 @@ export default function TrackPage() {
   const [isSevOpen,    setIsSevOpen]    = useState(false)
   const [selectedId,   setSelectedId]   = useState<string | null>(null)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
+  const [recenterTrigger, setRecenterTrigger] = useState(0)
   const detailRef = useRef<HTMLDivElement>(null)
 
   async function fetchData() {
@@ -216,26 +217,21 @@ export default function TrackPage() {
   return (
     <div className="space-y-5">
 
-      {/* ── MAP ─────────────────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        {/*
-          IMPORTANT: position:relative + z-[1000] ensures this header bar always
-          renders on top of the Leaflet map canvas/tiles during pan & zoom.
-        */}
-        <div className="relative z-[1000] flex items-center justify-between border-b border-gray-200
-                        bg-gray-50/80 px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex gap-5 text-sm font-medium text-gray-600">
+      {/* ── MAP HEADER ──────────────────────────────────────────────────────── */}
+      <div className="relative z-30 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-col gap-3 bg-gray-50/80 px-3 py-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between dark:bg-gray-900">
+          <div className="grid grid-cols-2 gap-2 text-xs font-medium text-gray-600 sm:flex sm:flex-wrap sm:items-center sm:gap-4 sm:text-sm lg:gap-5">
             {(["L1","L2","L3","L4"] as const).map(key => {
               const s = getSeverityConfig(key)
               return (
-                <span key={key} className="flex items-center gap-1.5">
+                <span key={key} className="flex items-center gap-1.5 rounded-md bg-white/70 px-2 py-1 dark:bg-gray-800/70 sm:rounded-none sm:bg-transparent sm:px-0 sm:py-0">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
                   {s.label}
                 </span>
               )
             })}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3 lg:flex-nowrap">
             {!loading && (
               <>
                 <span className="text-xs text-gray-400">{openCount} open</span>
@@ -246,13 +242,23 @@ export default function TrackPage() {
                 )}
               </>
             )}
-            <button className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700 transition-colors">
-              Full Map
+            <button
+              onClick={() => setRecenterTrigger(v => v + 1)}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 transition-colors sm:w-auto sm:px-4"
+            >
+              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M10 2a6 6 0 0 0-6 6c0 4.12 4.5 8.96 5.44 9.92a.8.8 0 0 0 1.12 0C11.5 16.96 16 12.12 16 8a6 6 0 0 0-6-6Zm0 8.5A2.5 2.5 0 1 1 10 5a2.5 2.5 0 0 1 0 5.5Z" clipRule="evenodd" />
+              </svg>
+              Reset View
             </button>
           </div>
         </div>
-        <div className="h-[380px] w-full">
-          <MapComponent selectedComplaintId={selectedId} />
+      </div>
+
+      {/* ── MAP ─────────────────────────────────────────────────────────────── */}
+      <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="relative z-0 h-[380px] w-full isolate">
+          <MapComponent selectedComplaintId={selectedId} recenterTrigger={recenterTrigger} />
         </div>
       </div>
 
