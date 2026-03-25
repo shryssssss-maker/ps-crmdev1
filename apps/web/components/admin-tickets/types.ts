@@ -28,7 +28,7 @@ export type TicketRecord = {
   worker: string
 }
 
-export const PAGE_SIZE = 20
+export const PAGE_SIZE = 10
 
 export const initialFilters: TicketFiltersState = {
   status: "all",

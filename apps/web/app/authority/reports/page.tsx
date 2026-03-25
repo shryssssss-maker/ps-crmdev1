@@ -145,7 +145,16 @@ function Skel() {
 }
 
 function Delta({ now, prev, invert = false }: { now: number; prev: number; invert?: boolean }) {
-  if (!prev) return null
+  if (prev === 0) {
+    if (now === 0) {
+      return <span className="flex items-center gap-0.5 text-[10px] text-gray-400"><Minus size={8} />same</span>
+    }
+    return (
+      <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${invert ? "text-red-500" : "text-emerald-600"}`}>
+        <ArrowUp size={8} />new vs prev
+      </span>
+    )
+  }
   const d = now - prev
   const p = Math.abs(Math.round((d / prev) * 100))
   const good = invert ? d < 0 : d > 0
