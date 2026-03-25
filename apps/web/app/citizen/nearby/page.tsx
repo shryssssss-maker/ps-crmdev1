@@ -74,6 +74,26 @@ export default function NearbyTicketsPage() {
 
   const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number } | null>(null);
+
+  const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
+  const highlightedRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    if (selectedComplaintId) {
+      setActiveHighlight(selectedComplaintId);
+      const timer = setTimeout(() => {
+        setActiveHighlight(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedComplaintId]);
+
+  useEffect(() => {
+    if (activeHighlight && highlightedRef.current) {
+      highlightedRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeHighlight, visibleComplaints.length]);
+
   const [radiusMeters, setRadiusMeters] = useState(1000);
   const [departmentFilter, setDepartmentFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -196,7 +216,7 @@ export default function NearbyTicketsPage() {
   const lowAccuracy = typeof accuracyMeters === "number" && accuracyMeters > 50;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <div className="flex min-w-0 max-w-full flex-col bg-gray-50 dark:bg-gray-950 min-h-full">
       <div className="shrink-0 border-b border-gray-200 bg-white dark:border-[#2a2a2a] dark:bg-[#1e1e1e]">
         <NearbyTicketsMap
           complaints={filteredComplaints}
@@ -209,8 +229,8 @@ export default function NearbyTicketsPage() {
         />
       </div>
 
-      <div className="flex-1 min-h-0 min-w-0 max-w-full overflow-hidden p-3">
-        <section className="flex-1 min-h-0 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col max-h-[calc(100vh-14rem)] lg:max-h-[calc(100vh-12rem)] dark:border-[#2a2a2a] dark:bg-[#161616]">
+      <div className="min-w-0 max-w-full p-3">
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm flex flex-col dark:border-[#2a2a2a] dark:bg-[#161616]">
           {(gpsSignalStale || lowAccuracy) && (
             <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/50 dark:text-amber-200">
               {gpsSignalStale ? "Searching for GPS signal... live updates are temporarily delayed." : ""}
@@ -366,8 +386,8 @@ export default function NearbyTicketsPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
-            <div className="min-w-[940px] flex flex-col flex-1 min-h-0">
+          <div className="overflow-x-auto flex flex-col">
+            <div className="min-w-[940px] flex flex-col">
               <div className="sticky top-0 z-10 grid grid-cols-[150px_2.2fr_1.2fr_1fr_1fr_100px_120px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-400">
                 <span>Ticket ID</span>
                 <span>Issue Title</span>
@@ -378,7 +398,7 @@ export default function NearbyTicketsPage() {
                 <span>Severity</span>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-h-[60vh] overflow-y-auto">
                 {loading && (
                   <div className="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">Loading nearby tickets...</div>
                 )}
@@ -408,12 +428,17 @@ export default function NearbyTicketsPage() {
 
                       return (
                         <li
-                          key={complaint.id}
-                          onClick={() => handleSelectComplaint(complaint)}
-                          className={`grid cursor-pointer grid-cols-[150px_2.2fr_1.2fr_1fr_1fr_100px_120px] gap-3 px-4 py-4 text-sm transition-colors ${
-                            isSelected ? "bg-blue-50 dark:bg-blue-900/20" : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1e1e1e]"
-                          }`}
-                        >
+                        key={complaint.id}
+                        ref={complaint.id === activeHighlight ? highlightedRef : null}
+                        onClick={() => handleSelectComplaint(complaint)}
+                        className={`grid cursor-pointer grid-cols-[150px_2.2fr_1.2fr_1fr_1fr_100px_120px] gap-3 px-4 py-4 text-sm transition-all duration-1000 ${
+                          complaint.id === activeHighlight
+                            ? "bg-purple-100/50 shadow-[0_0_20px_rgba(168,85,247,0.4)] z-10 relative dark:bg-purple-900/40"
+                            : isSelected
+                              ? "bg-blue-50 dark:bg-blue-900/20"
+                              : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#1e1e1e]"
+                        }`}
+                      >
                           <span className="truncate font-mono text-xs font-medium text-gray-900 sm:text-sm dark:text-gray-200">
                             {complaint.ticket_id || complaint.id.slice(0, 8).toUpperCase()}
                           </span>
