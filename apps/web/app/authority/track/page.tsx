@@ -218,13 +218,13 @@ export default function TrackPage() {
     <div className="space-y-5">
 
       {/* ── MAP HEADER ──────────────────────────────────────────────────────── */}
-      <div className="relative z-30 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex flex-col gap-3 bg-gray-50/80 px-3 py-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between dark:bg-gray-900">
+      <div className="relative z-30 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#2a2a2a] dark:bg-[#161616]">
+        <div className="flex flex-col gap-3 bg-gray-50/80 px-3 py-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between dark:bg-[#1e1e1e]">
           <div className="grid grid-cols-2 gap-2 text-xs font-medium text-gray-600 sm:flex sm:flex-wrap sm:items-center sm:gap-4 sm:text-sm lg:gap-5">
             {(["L1","L2","L3","L4"] as const).map(key => {
               const s = getSeverityConfig(key)
               return (
-                <span key={key} className="flex items-center gap-1.5 rounded-md bg-white/70 px-2 py-1 dark:bg-gray-800/70 sm:rounded-none sm:bg-transparent sm:px-0 sm:py-0">
+                <span key={key} className="flex items-center gap-1.5 rounded-md bg-white/70 px-2 py-1 dark:bg-[#2a2a2a] sm:rounded-none sm:bg-transparent sm:px-0 sm:py-0">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
                   {s.label}
                 </span>
@@ -256,14 +256,14 @@ export default function TrackPage() {
       </div>
 
       {/* ── MAP ─────────────────────────────────────────────────────────────── */}
-      <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#2a2a2a] dark:bg-[#161616]">
         <div className="relative z-0 h-[380px] w-full isolate">
           <MapComponent selectedComplaintId={selectedId} recenterTrigger={recenterTrigger} />
         </div>
       </div>
 
       {/* ── TABLE ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl bg-[#eef3f4] p-4 dark:bg-gray-900/50">
+      <div className="rounded-2xl bg-[#eef3f4] p-4 dark:bg-[#1a1a1a]">
         {/* Table header */}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -276,7 +276,7 @@ export default function TrackPage() {
             </p>
           </div>
           <button onClick={exportCSV}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-300">
             Export CSV
           </button>
         </div>
@@ -285,20 +285,20 @@ export default function TrackPage() {
         <div className="mb-3 flex flex-wrap gap-2">
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search ticket, title, address…"
-            className="flex-1 min-w-44 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#b4725a] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            className="flex-1 min-w-44 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#b4725a] dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-200"
           />
 
           {/* Sort */}
           <div className="relative">
             <button onClick={() => { setIsSortOpen(o => !o); setIsStatOpen(false); setIsSevOpen(false) }}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-300">
               {{ latest:"Latest", oldest:"Oldest", severity:"Severity", upvotes:"Upvoted", sla:"SLA" }[sortBy] ?? "Sort"}
               <span className="text-[10px] opacity-60">▼</span>
             </button>
-            <div className={`absolute left-0 top-full z-50 mt-1 w-38 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800 transition-all duration-200 ${isSortOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-2 pointer-events-none"}`}>
+            <div className={`absolute left-0 top-full z-50 mt-1 w-38 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#1e1e1e] transition-all duration-200 ${isSortOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-2 pointer-events-none"}`}>
               {[["latest","Latest first"],["oldest","Oldest first"],["severity","By severity"],["upvotes","Most upvoted"],["sla","Urgent SLA first"]].map(([v,l]) => (
                 <button key={v} onClick={() => { setSortBy(v); setIsSortOpen(false) }}
-                  className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${sortBy===v?"font-semibold text-[#b4725a]":"text-gray-700 dark:text-gray-300"}`}>
+                  className={`block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-[#2a2a2a] transition-colors ${sortBy===v?"font-semibold text-[#b4725a]":"text-gray-700 dark:text-gray-300"}`}>
                   {l}
                 </button>
               ))}
