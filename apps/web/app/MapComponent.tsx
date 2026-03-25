@@ -17,6 +17,7 @@ export default function MapPage({
     <MapComponent
       selectedComplaintId={selectedComplaintId}
       recenterTrigger={recenterTrigger}
+      highQuality
     />
   );
 }

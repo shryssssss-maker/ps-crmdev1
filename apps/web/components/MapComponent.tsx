@@ -168,9 +168,11 @@ function parseLocationToLatLng(location: unknown): { lat: number; lng: number } 
 export default function MapComponent({
   selectedComplaintId,
   recenterTrigger,
+  highQuality,
 }: {
   selectedComplaintId?: string | null;
   recenterTrigger?: number;
+  highQuality?: boolean;
 }) {
   const [complaints, setComplaints] = useState<MapComplaint[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -285,12 +287,26 @@ export default function MapComponent({
       <MapContainer
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
+        maxZoom={highQuality ? 20 : 19}
+        zoomSnap={highQuality ? 0.25 : 1}
+        zoomDelta={highQuality ? 0.25 : 1}
         zoomControl={false}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution="© OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={
+            highQuality
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              : "© OpenStreetMap contributors"
+          }
+          url={
+            highQuality
+              ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          }
+          detectRetina={Boolean(highQuality)}
+          maxNativeZoom={highQuality ? 20 : 19}
+          subdomains={highQuality ? "abcd" : "abc"}
         />
         <ZoomToComplaint
           complaints={complaints}
