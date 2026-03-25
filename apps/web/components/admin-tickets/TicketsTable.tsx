@@ -43,15 +43,13 @@ export default function TicketsTable({
   onEscalate,
 }: TicketsTableProps) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:shadow-none">
       <table className="w-full min-w-[1130px] table-fixed border-collapse">
         <colgroup>
           {columnWidths.map((width, idx) => (
             <col key={idx} style={{ width }} />
           ))}
         </colgroup>
-    <div className="overflow-x-auto rounded-2xl border border-[#d4cdc2] bg-white shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:shadow-none">
-      <table className="min-w-[1080px] w-full border-collapse">
         <thead>
           <tr className="bg-[#ece5db] text-left dark:bg-[#161616]">
             {headers.map((header) => (

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
+  Bell,
   CheckCircle2,
   Clock3,
   Flag,
@@ -62,6 +63,7 @@ export default function AdminStatsOverview() {
   const [stats, setStats] = useState<DashboardStats>(initialStats)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dateTime, setDateTime] = useState<string>("")
 
   const fetchStats = useCallback(async () => {
     setError(null)
@@ -138,6 +140,28 @@ export default function AdminStatsOverview() {
     }
   }, [fetchStats])
 
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date()
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+      setDateTime(formatter.format(now))
+    }
+
+    updateClock()
+    const clockInterval = setInterval(updateClock, 1000)
+
+    return () => clearInterval(clockInterval)
+  }, [])
+
   return (
     <section className="space-y-5">
       <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:shadow-none">
@@ -145,7 +169,7 @@ export default function AdminStatsOverview() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 dark:border-[#3a3a3a] dark:bg-[#161616] dark:text-gray-300">
               <Clock3 size={16} className="text-gray-600 dark:text-gray-400" />
-              <span>{dateTimeText}</span>
+              <span>{dateTime || "Loading..."}</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
               <Bell size={16} />

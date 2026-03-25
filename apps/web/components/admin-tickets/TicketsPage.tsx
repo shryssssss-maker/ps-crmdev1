@@ -374,7 +374,6 @@ export default function TicketsPage() {
   }, [totalCount])
 
   return (
-    <section className="flex h-[calc(100vh-10rem)] min-h-[620px] flex-col rounded-2xl border border-[#d8cfbe] bg-[#f4efe5] p-4 text-[#27221d] shadow-sm">
     <section className="space-y-4 rounded-2xl border border-[#d8cfbe] bg-[#f4efe5] p-4 text-[#27221d] shadow-sm dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-100 dark:shadow-none">
       <TicketsHeader now={now} />
       <TicketSearch
@@ -410,10 +409,6 @@ export default function TicketsPage() {
 
       <div className="mt-3 shrink-0 border-t border-[#d8cfbe] pt-3">
         <Pagination page={page} totalPages={totalPages} totalCount={totalCount} pageSize={PAGE_SIZE} onPageChange={setPage} />
-      <Pagination page={page} totalPages={totalPages} totalCount={totalCount} pageSize={PAGE_SIZE} onPageChange={setPage} />
-
-      <div className="flex justify-end pt-2 text-sm text-[#4b433b] dark:text-gray-400">
-        <p>Platform Version 3.1 - National Deployment - Government of India</p>
       </div>
 
       <footer className="mt-3 shrink-0 border-t border-[#d8cfbe] pt-3 text-sm text-[#5f554c]">
@@ -422,11 +417,6 @@ export default function TicketsPage() {
           <p className="text-[#4b433b]">Platform Version 3.1 - National Deployment - Government of India</p>
         </div>
       </footer>
-      {loading ? (
-        <p className="text-sm text-[#5f554c] dark:text-gray-400">Loading tickets...</p>
-      ) : (
-        <p className="text-sm text-[#5f554c] dark:text-gray-400">Data synced from Supabase.</p>
-      )}
 
       {isViewOpen && selectedTicket ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
