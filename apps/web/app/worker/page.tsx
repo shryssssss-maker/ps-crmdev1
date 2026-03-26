@@ -351,7 +351,7 @@ export default function WorkerDashboardPage() {
   )
 
   const mapTasks = useMemo(
-    () => tasks.filter((task) => task.status === "assigned" || task.status === "in_progress"),
+    () => tasks,
     [tasks],
   )
 
