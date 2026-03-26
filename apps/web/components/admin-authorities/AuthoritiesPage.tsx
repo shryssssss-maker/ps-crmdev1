@@ -93,7 +93,20 @@ export default function AuthoritiesPage() {
       return
     }
 
-    const response = await fetch("/api/admin/authorities", {
+    const cacheKey = "admin_authorities_list"
+    const cached = typeof window !== "undefined" ? localStorage.getItem(cacheKey) : null;
+
+    if (cached && loading) {
+      try {
+        const localData = JSON.parse(cached);
+        // We still need to process them into records
+        // For simplicity in this first pass, we'll let the network request finish 
+        // but showing 'something' is better than nothing if we had a more complex state.
+      } catch (e) {}
+    }
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const response = await fetch(`${apiUrl}/api/admin/authorities`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${session.access_token}`,

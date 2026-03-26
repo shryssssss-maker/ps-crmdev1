@@ -641,6 +641,127 @@ async def get_citizen_tickets(
 
 
 # =========================================================
+# 8c. ADMIN DASHBOARD STATS (Consolidated + Redis)
+# =========================================================
+
+@app.get("/api/admin/dashboard/stats")
+async def get_admin_dashboard_stats(
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Consolidates 6 heavy Supabase counts into one Redis-cached payload.
+    Used by AdminStatsOverview component.
+    """
+    # 1. Check Redis Cache (5-minute TTL)
+    cache_key = "admin:stats:global"
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return { "source": "cache", **json.loads(cached) }
+        except Exception as e:
+            print(f"Redis read error: {e}")
+
+    # 2. Fetch from Supabase in Parallel
+    try:
+        [
+            total_res, active_res, resolved_res, escalated_res, authorities_res, resolved_rows
+        ] = await asyncio.gather(
+            asyncio.to_thread(lambda: supabase.table("complaints").select("id", count="exact").execute()),
+            asyncio.to_thread(lambda: supabase.table("complaints").select("id", count="exact").in_("status", ["submitted", "under_review", "assigned", "in_progress", "escalated"]).execute()),
+            asyncio.to_thread(lambda: supabase.table("complaints").select("id", count="exact").eq("status", "resolved").execute()),
+            asyncio.to_thread(lambda: supabase.table("complaints").select("id", count="exact").eq("status", "escalated").execute()),
+            asyncio.to_thread(lambda: supabase.table("profiles").select("id", count="exact").eq("role", "authority").eq("is_blocked", False).execute()),
+            asyncio.to_thread(lambda: supabase.table("complaints").select("created_at, resolved_at").eq("status", "resolved").execute())
+        )
+
+        # Calculate Average Resolution Days
+        resolved_data = resolved_rows.data or []
+        durations = []
+        for r in resolved_data:
+            if r.get("resolved_at"):
+                try:
+                    start = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+                    end = datetime.fromisoformat(r["resolved_at"].replace("Z", "+00:00"))
+                    delta = (end - start).total_seconds() / (3600 * 24)
+                    if delta >= 0:
+                        durations.append(delta)
+                except Exception:
+                    pass
+        
+        avg_days = sum(durations) / len(durations) if durations else 0
+
+        stats = {
+            "totalComplaints":    total_res.count or 0,
+            "activeComplaints":   active_res.count or 0,
+            "resolvedComplaints": resolved_res.count or 0,
+            "urgentEscalations":  escalated_res.count or 0,
+            "avgResolutionDays":  round(avg_days, 1),
+            "authoritiesActive": authorities_res.count or 0,
+        }
+
+        # 3. Cache in Redis
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 300, json.dumps(stats))
+            except Exception as e:
+                print(f"Redis write error: {e}")
+
+        return { "source": "database", **stats }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Admin stats fetch failed: {str(e)}")
+
+
+# =========================================================
+# 8d. ADMIN AUTHORITIES LIST (Consolidated + Redis)
+# =========================================================
+
+@app.get("/api/admin/authorities")
+async def get_admin_authorities_list(
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Consolidates profiles, worker counts, and category data into one payload.
+    Matches the exact schema of the original Next.js /api/admin/authorities route.
+    """
+    cache_key = "admin:authorities:list"
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return { "source": "cache", **json.loads(cached) }
+        except Exception as e:
+            print(f"Redis read error: {e}")
+
+    try:
+        [profiles_res, complaints_res, workers_res, categories_res] = await asyncio.gather(
+            asyncio.to_thread(lambda: supabase.table("profiles").select("id, full_name, email, phone, city, department, is_blocked, created_at").eq("role", "authority").order("created_at", desc=True).execute()),
+            asyncio.to_thread(lambda: supabase.table("complaints").select("id, assigned_officer_id, assigned_department, status, created_at, resolved_at").execute()),
+            asyncio.to_thread(lambda: supabase.table("worker_profiles").select("worker_id, department").execute()),
+            asyncio.to_thread(lambda: supabase.table("categories").select("name, department").eq("is_active", True).execute())
+        )
+
+        payload = {
+            "profiles":   profiles_res.data or [],
+            "complaints": complaints_res.data or [],
+            "workers":    workers_res.data or [],
+            "categories": categories_res.data or [],
+        }
+
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 600, json.dumps(payload))
+            except Exception as e:
+                print(f"Redis write error: {e}")
+
+        return { "source": "database", **payload }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authorities data fetch failed: {str(e)}")
+
+
+# =========================================================
 # 9. ROOT MESSAGE
 # =========================================================
 
