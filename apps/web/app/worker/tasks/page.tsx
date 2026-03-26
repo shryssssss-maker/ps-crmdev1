@@ -174,15 +174,11 @@ export default function WorkerTasksPage() {
         });
     });
 
-    const pollInterval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void fetchTasks();
-      }
-    }, 15000);
+    // PERFORMANCE OPTIMIZATION: Removed 15s polling.
+    // Realtime sync viasupabase.channel handles updates efficiently.
 
     return () => {
       isActive = false;
-      window.clearInterval(pollInterval);
       if (channel) {
         void channel.unsubscribe();
       }

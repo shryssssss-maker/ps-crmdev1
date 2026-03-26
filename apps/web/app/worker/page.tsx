@@ -181,15 +181,8 @@ export default function WorkerDashboardPage() {
     return () => window.clearTimeout(timeoutId)
   }, [fetchDashboardData])
 
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void fetchDashboardData()
-      }
-    }, 15000)
-
-    return () => window.clearInterval(intervalId)
-  }, [fetchDashboardData])
+  // PERFORMANCE OPTIMIZATION: Removed 15s polling. 
+  // We now rely entirely on the Realtime channels below for updates.
 
   // ── Realtime sync: listen for external changes ──────────────────────────────
   useEffect(() => {
