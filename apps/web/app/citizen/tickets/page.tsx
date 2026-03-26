@@ -290,15 +290,11 @@ function CitizenTicketsPageContent() {
         }
       });
 
-    const pollInterval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void fetchTickets();
-      }
-    }, 12000);
+    // PERFORMANCE OPTIMIZATION: Removed 12s polling.
+    // Realtime sync via supabase.channel handles updates efficiently.
 
     return () => {
       isActive = false;
-      window.clearInterval(pollInterval);
       void channel.unsubscribe();
     };
   }, [citizenId]);
