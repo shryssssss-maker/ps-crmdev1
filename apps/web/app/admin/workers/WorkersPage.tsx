@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import AuthoritiesGrid from "@/components/admin-authorities/AuthoritiesGrid"
 import AuthorityFilters from "@/components/admin-authorities/AuthorityFilters"
 import AuthoritiesHeader from "@/components/admin-authorities/AuthoritiesHeader"
@@ -392,12 +393,12 @@ export default function WorkersPage() {
         >
           + Add New Worker
         </button>
-        <button
-          type="button"
-          className="rounded-xl border border-[#d7cebf] bg-white px-4 py-2 text-sm font-medium text-[#2d2722] dark:border-[#3a3a3a] dark:bg-[#2a2a2a] dark:text-gray-100"
+        <Link
+          href="/admin/workers/reports"
+          className="rounded-xl border border-[#d7cebf] bg-white px-4 py-2 text-sm font-medium text-[#2d2722] hover:bg-gray-50 flex items-center justify-center transition-colors dark:border-[#3a3a3a] dark:bg-[#2a2a2a] dark:text-gray-100"
         >
           View Reports
-        </button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
