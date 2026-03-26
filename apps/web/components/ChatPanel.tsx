@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Plus, ChevronDown, ChevronUp, Mic, MicOff } from "lucide-react";
+import { Send, Loader2, Plus, ChevronDown, ChevronUp, Mic, MicOff, Globe } from "lucide-react";
 import gsap from "gsap";
 import { sendToGemini } from "@/lib/gemini";
 import type { ChatMessage, ExtractedComplaint, GeminiResponse } from "@/lib/gemini";
@@ -631,11 +631,29 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
 
   /* ----- initialize with greeting after language selection ----- */
   useEffect(() => {
-    if (!selectedLanguage || initialized || messages.length > 0) return;
-    addBotMessage(t(selectedLanguage, "greeting"));
+    if (!selectedLanguage) return;
+    
+    // Reset state on language change
+    historyRef.current = [];
+    setPendingComplaint(null);
+    setPendingImagePreview(null);
+    setPendingImageDataUrl(null);
+    setPendingImageFile(null);
+    setPendingLocation(null);
+    setLocationConfirmed(false);
+    setDuplicateContext(null);
     setInitialized(true);
+    
+    // Add greeting in new language directly to avoid state batching issues
+    const initialMsg = { 
+      id: Math.random().toString(36).slice(2, 10), 
+      role: "bot" as const, 
+      text: t(selectedLanguage, "greeting") 
+    };
+    setMessages([initialMsg]);
+    
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [selectedLanguage, initialized]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLanguage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ----- get confirmation pattern for current language ----- */
   const getConfirmationPattern = useCallback(() => {
@@ -1223,8 +1241,19 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
 
       {/* -- Messages -- */}
       {selectedLanguage && (
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
-        <div className="flex flex-col justify-end space-y-3 min-h-full">
+        <>
+          <div className="flex justify-end px-4 py-2 border-b border-gray-100 dark:border-[#2a2a2a] bg-gray-50/50 dark:bg-[#161616]">
+            <button
+              onClick={() => setSelectedLanguage(null)}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors bg-white dark:bg-[#1e1e1e] px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-[#333] shadow-sm"
+              title="Change Language"
+            >
+              <Globe size={14} className="text-[#b4725a] dark:text-[#C9A84C]" />
+              <span>Change Language</span>
+            </button>
+          </div>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
+            <div className="flex flex-col justify-end space-y-3 min-h-full">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
@@ -1362,6 +1391,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         )}
         </div>
       </div>
+      </>
       )}
 
       {/* -- Input bar -- */}
