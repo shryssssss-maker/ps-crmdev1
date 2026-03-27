@@ -857,6 +857,7 @@ export type Database = {
         | "under_review"
         | "assigned"
         | "in_progress"
+        | "pending_closure"
         | "resolved"
         | "rejected"
         | "escalated"
@@ -998,6 +999,7 @@ export const Constants = {
         "under_review",
         "assigned",
         "in_progress",
+        "pending_closure",
         "resolved",
         "rejected",
         "escalated",
