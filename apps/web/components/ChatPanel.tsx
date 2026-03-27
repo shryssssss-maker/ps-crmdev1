@@ -1490,7 +1490,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
             className={`w-full transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] min-h-0 overflow-y-auto px-4 ${isInitialView ? 'flex-[0_1_0%] opacity-0 h-0 py-0' : 'flex-[1_1_0%] opacity-100 py-3'}`}
             style={{ display: 'flex', flexDirection: 'column' }}
           >
-            <div ref={messagesAreaRef} className={`max-w-3xl mx-auto flex flex-col justify-end space-y-3 min-h-full w-full transition-opacity duration-300 delay-300 ${isInitialView ? 'opacity-0' : 'opacity-100'}`}>
+            <div ref={messagesAreaRef} className={`max-w-3xl mx-auto flex flex-col space-y-3 w-full transition-opacity duration-300 delay-300 ${isInitialView ? 'opacity-0' : 'opacity-100'}`}>
               {messagesContent}
             </div>
           </div>
