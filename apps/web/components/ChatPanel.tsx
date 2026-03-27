@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Plus, ChevronDown, ChevronUp, Mic, MicOff, Globe } from "lucide-react";
+import { Mic, MicOff, Send, Plus, MapPin, CheckCircle2, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, RefreshCw, X, Globe } from "lucide-react";
 import gsap from "gsap";
 import { sendToGemini } from "@/lib/gemini";
 import type { ChatMessage, ExtractedComplaint, GeminiResponse } from "@/lib/gemini";
 import { supabase } from "@/src/lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
+import { saveSharedState, getSharedState, clearSharedState } from "../lib/db";
 import dynamic from "next/dynamic";
 
 const LocationPinPicker = dynamic(() => import("@/components/LocationPinPicker"), {
@@ -581,6 +583,22 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
   const userIdRef = useRef<string | null>(null);
   const [isHistoryInitialized, setIsHistoryInitialized] = useState(false);
 
+  // Save pending UI flow state to IndexedDB 
+  useEffect(() => {
+    if (!userIdRef.current || !isHistoryInitialized) return;
+    const stateObj = {
+      pendingComplaint,
+      pendingImagePreview,
+      pendingImageFile,
+      pendingImageDataUrl,
+      pendingLocation,
+      duplicateContext,
+      locationConfirmed,
+      submitted
+    };
+    saveSharedState(`jansamadhan_pending_state_${userIdRef.current}`, stateObj).catch(console.error);
+  }, [pendingComplaint, pendingImagePreview, pendingImageFile, pendingImageDataUrl, pendingLocation, duplicateContext, locationConfirmed, submitted, isHistoryInitialized]);
+
   // Initialize session and history — tied to logged-in user via localStorage
   useEffect(() => {
     const initializeChat = async () => {
@@ -624,12 +642,27 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
           }
         } catch (err) {
           console.error("Failed to fetch chat history:", err);
-        } finally {
-          setIsHistoryInitialized(true);
         }
-      } else {
-        setIsHistoryInitialized(true);
       }
+      
+      // 4. Restore pending UI flow state if any (handles reloads cleanly)
+      try {
+        const savedState = await getSharedState(`jansamadhan_pending_state_${userId}`);
+        if (savedState) {
+          if (savedState.pendingComplaint !== undefined) setPendingComplaint(savedState.pendingComplaint);
+          if (savedState.pendingImagePreview !== undefined) setPendingImagePreview(savedState.pendingImagePreview);
+          if (savedState.pendingImageFile !== undefined) setPendingImageFile(savedState.pendingImageFile);
+          if (savedState.pendingImageDataUrl !== undefined) setPendingImageDataUrl(savedState.pendingImageDataUrl);
+          if (savedState.pendingLocation !== undefined) setPendingLocation(savedState.pendingLocation);
+          if (savedState.duplicateContext !== undefined) setDuplicateContext(savedState.duplicateContext);
+          if (savedState.locationConfirmed !== undefined) setLocationConfirmed(savedState.locationConfirmed);
+          if (savedState.submitted !== undefined) setSubmitted(savedState.submitted);
+        }
+      } catch (e) {
+        console.error("Failed to restore UI state", e);
+      }
+      
+      setIsHistoryInitialized(true);
     };
 
     initializeChat();
@@ -637,7 +670,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
 
   // Clear chat history from Redis & localStorage on logout
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       if (event === "SIGNED_OUT") {
         // Clear Redis-cached history
         if (sessionIdRef.current) {
@@ -651,6 +684,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         // Clear the specific user's session from localStorage
         if (userIdRef.current) {
           localStorage.removeItem(`jansamadhan_session_id_${userIdRef.current}`);
+          clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
           userIdRef.current = null;
         }
         
@@ -1042,6 +1076,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       const created = await res.json();
 
       setSubmitted(true);
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setPendingImagePreview(null);
       setPendingImageFile(null);
       setPendingImageDataUrl(null);
@@ -1113,6 +1148,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       }
 
       setSubmitted(true);
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setPendingComplaint(null);
       setPendingLocation(null);
       setDuplicateContext(null);
@@ -1140,6 +1176,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to upvote complaint");
 
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setDuplicateContext(null);
       setPendingComplaint(null);
       setPendingImagePreview(null);
@@ -1546,7 +1583,13 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       )}
 
       {/* -- Unified View: Smoothly transitions from Claude-like welcome to active chat -- */}
-      {selectedLanguage && (
+      {selectedLanguage && !isHistoryInitialized && (
+        <div className="flex flex-col items-center justify-center h-full relative">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400/50" />
+        </div>
+      )}
+
+      {selectedLanguage && isHistoryInitialized && (
         <div className="flex flex-col h-full relative">
           {/* Top spacer for initial vertical centering */}
           <div 
