@@ -642,6 +642,47 @@ async def confirm(
 # 8b. CITIZEN TICKETS (with Redis Caching & Delta support)
 # =========================================================
 
+@app.get("/citizen/nearby")
+async def get_citizen_nearby(authorization: Optional[str] = Header(None)):
+    """
+    Fetch all complaints for the nearby map, excluding the citizen's own tickets.
+    Cached in Redis.
+    """
+    citizen_id = get_citizen_id_from_token(authorization)
+    cache_key = "global:citizen:nearby_tickets"
+
+    if redis_client:
+        try:
+            cached_data = redis_client.get(cache_key)
+            if cached_data:
+                all_tickets = json.loads(cached_data)
+                filtered_tickets = [t for t in all_tickets if t.get("citizen_id") != citizen_id]
+                return {"source": "cache", "items": filtered_tickets}
+        except Exception as e:
+            print(f"Redis read error: {e}")
+
+    try:
+        response = supabase.table("complaints").select(
+            "id, ticket_id, title, description, severity, effective_severity, location, "
+            "photo_urls, upvote_count, status, created_at, address_text, ward_name, "
+            "category_id, assigned_department, citizen_id"
+        ).order("upvote_count", desc=True).limit(500).execute()
+        
+        all_tickets = response.data or []
+        
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 300, json.dumps(all_tickets)) # 5 minute cache
+            except Exception as e:
+                print(f"Redis write error: {e}")
+
+        filtered_tickets = [t for t in all_tickets if t.get("citizen_id") != citizen_id]
+        return {"source": "database", "items": filtered_tickets}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
+
+
+
 @app.get("/citizen/tickets")
 async def get_citizen_tickets(
     since: Optional[str] = None,
