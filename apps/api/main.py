@@ -173,6 +173,13 @@ class AdminWorkerCreate(BaseModel):
     department: str
 
 
+class ComplaintAssignRequest(BaseModel):
+    complaint_id: str
+    worker_id: Optional[str] = None
+    status: str
+
+
+
 
 # =========================================================
 # 5. HELPERS
@@ -1244,9 +1251,61 @@ async def create_admin_worker(
 
 
 
+@app.patch("/api/authority/assign")
+async def assign_complaint(
+    payload: ComplaintAssignRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """Assign/Unassign worker to a complaint and invalidate caches."""
+    user_id = get_citizen_id_from_token(authorization)
+    # Role check: must be admin or authority
+    res = await asyncio.to_thread(lambda: supabase.table("profiles").select("role").eq("id", user_id).maybe_single().execute())
+    
+    current_role = (res.data.get("role") or "").lower() if res.data else ""
+    print(f"DEBUG: User {user_id} has role: '{current_role}'")
+    
+    if current_role not in ["admin", "authority"]:
+        print(f"DEBUG: Role check failed for user {user_id}. Role found: {current_role}")
+        raise HTTPException(status_code=403, detail=f"Forbidden. {current_role.capitalize() if current_role else 'Unknown'} role not authorized for assignment.")
+
+
+    try:
+        # Update complaint
+        print(f"DEBUG: Authority {user_id} assigning worker {payload.worker_id} to complaint {payload.complaint_id}")
+        
+        res = await asyncio.to_thread(
+            lambda: supabase.rpc("assign_worker_to_complaint", {
+                "p_admin_id": user_id,
+                "p_complaint_id": payload.complaint_id,
+                "p_worker_id": payload.worker_id if payload.worker_id else None
+            }).execute()
+        )
+        
+        if hasattr(res, 'error') and res.error:
+            print(f"DEBUG: Assignment DB Error: {res.error}")
+            raise Exception(str(res.error))
+
+        # Invalidate Redis Caches
+        if redis_client:
+            try:
+                # 1. Dashboard for THIS user (authority)
+                redis_client.delete(f"authority:dashboard:{user_id}")
+                # 2. Admin complaints list (since assignment/status changed)
+                redis_client.delete("admin:complaints:list")
+            except Exception as e:
+                print(f"Redis invalidation failed: {e}")
+
+        return {"status": "success"}
+    except Exception as e:
+        print(f"DEBUG: Full Assignment Exception: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Assignment failed: {str(e)}")
+
+
+
 # =========================================================
 # 8f. ADMIN COMPLAINTS LIST (Consolidated + Redis)
 # =========================================================
+
 
 def _parse_priority_to_severity(priority: str) -> Optional[str]:
     mapping = {"low": "L1", "medium": "L2", "high": "L3", "emergency": "L4"}
