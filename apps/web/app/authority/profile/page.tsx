@@ -166,12 +166,12 @@ export default function ProfilePage() {
 
     // Wait for the glitch animation to visually complete, then safely route user
     setTimeout(() => {
-      router.push(`/worker/dashboard`)
+      router.push(`/authority/dashboard`)
     }, 350)
   }
 
   // Handlers for Profile Editing
-  const nameDisplay = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Field Worker'
+  const nameDisplay = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Authority Officer'
   const emailDisplay = user?.email || ""
   const usernameDisplay = user?.user_metadata?.username ?? `${nameDisplay.split(' ')[0]}_user`
 
@@ -333,11 +333,11 @@ export default function ProfilePage() {
             <div className="space-y-3 text-lg sm:text-xl md:text-2xl pl-5 border-l-4 border-[#f59e0b]/60 py-2">
               <button className="flex items-center gap-3 interactive-item w-full text-left px-2 py-1 rounded" onClick={handleInteraction}>
                 <span className="text-gray-800 dark:text-[#f59e0b] w-2 h-2 bg-[#C9A84C] dark:bg-[#f59e0b] shadow-none dark:shadow-[0_0_8px_#f59e0b]"></span>
-                Field Worker
+                Authority Officer
               </button>
               <button className="flex items-center gap-3 interactive-item w-full text-left px-2 py-1 rounded" onClick={handleInteraction}>
                 <span className="text-gray-800 dark:text-[#f59e0b] w-2 h-2 bg-[#C9A84C] dark:bg-[#f59e0b] shadow-none dark:shadow-[0_0_8px_#f59e0b]"></span>
-                Worker Portal
+                Authority Portal
               </button>
             </div>
 
