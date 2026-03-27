@@ -1586,17 +1586,34 @@ async def create_material_request(
     worker_id = get_citizen_id_from_token(authorization)
     
     try:
-        # 1. Verify worker is assigned to this complaint
-        comp_res = await asyncio.to_thread(
-            lambda: supabase.table("complaints")
-            .select("id, assigned_worker_id")
-            .eq("id", request.complaint_id)
-            .maybe_single()
-            .execute()
-        )
-        if not comp_res.data:
+        # Trim whitespace from URL and keys if any
+        base_url = SUPABASE_URL.strip().rstrip("/")
+        api_key = SUPABASE_SERVICE_KEY.strip()
+
+        # 1. Verify worker is assigned to this complaint using direct REST API
+        async with httpx.AsyncClient() as client:
+            comp_resp = await client.get(
+                f"{base_url}/rest/v1/complaints",
+                params={
+                    "id": f"eq.{request.complaint_id}",
+                    "select": "id,assigned_worker_id"
+                },
+                headers={
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {api_key}"
+                },
+                timeout=10.0
+            )
+        
+        if comp_resp.status_code != 200:
+            raise HTTPException(status_code=comp_resp.status_code, detail=f"Failed to verify complaint ({comp_resp.status_code}): {comp_resp.text}")
+        
+        comp_data = comp_resp.json()
+        if not comp_data:
             raise HTTPException(status_code=404, detail="Complaint not found")
-        if comp_res.data["assigned_worker_id"] != worker_id:
+        
+        # Check assignment
+        if comp_data[0].get("assigned_worker_id") != worker_id:
             raise HTTPException(status_code=403, detail="You are not assigned to this complaint")
             
         # 2. Insert via direct REST API (bypasses supabase-py 204 bug)
@@ -1688,18 +1705,32 @@ async def allot_material(
     get_citizen_id_from_token(authorization)
     
     try:
+        base_url = SUPABASE_URL.strip().rstrip("/")
+        api_key = SUPABASE_SERVICE_KEY.strip()
+
         # 1. Get the request details
-        req_res = await asyncio.to_thread(
-            lambda: supabase.table("material_requests")
-            .select("*, warehouse_inventory(available_quantity)")
-            .eq("id", request.request_id)
-            .maybe_single()
-            .execute()
-        )
-        if not req_res.data:
+        async with httpx.AsyncClient() as client:
+            req_resp = await client.get(
+                f"{base_url}/rest/v1/material_requests",
+                params={
+                    "id": f"eq.{request.request_id}",
+                    "select": "*,warehouse_inventory(available_quantity)"
+                },
+                headers={
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {api_key}"
+                },
+                timeout=10.0
+            )
+        
+        if req_resp.status_code != 200:
+            raise HTTPException(status_code=req_resp.status_code, detail=f"Failed to fetch request ({req_resp.status_code}): {req_resp.text}")
+        
+        req_list = req_resp.json()
+        if not req_list:
             raise HTTPException(status_code=404, detail="Request not found")
         
-        req_data = req_res.data
+        req_data = req_list[0]
         if req_data["status"] != "pending":
             raise HTTPException(status_code=400, detail=f"Request is already {req_data['status']}")
             
@@ -1708,19 +1739,21 @@ async def allot_material(
             if available < req_data["requested_quantity"]:
                 raise HTTPException(status_code=400, detail="Insufficient inventory for this request")
             
-            # Decrement inventory (in production use a stored procedure for atomicity)
-            try:
-                await asyncio.to_thread(
-                    lambda: supabase.table("warehouse_inventory")
-                    .update({"available_quantity": available - req_data["requested_quantity"]})
-                    .eq("id", req_data["material_id"])
-                    .execute()
+            # Decrement inventory using httpx
+            async with httpx.AsyncClient() as client:
+                inv_resp = await client.patch(
+                    f"{base_url}/rest/v1/warehouse_inventory",
+                    params={"id": f"eq.{req_data['material_id']}"},
+                    json={"available_quantity": available - req_data["requested_quantity"]},
+                    headers={
+                        "apikey": api_key,
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=10.0
                 )
-            except Exception as inv_err:
-                err_str = str(inv_err)
-                if "Missing response" not in err_str and "204" not in err_str:
-                    raise inv_err
-                print(f"Inventory update succeeded (204 silent): material_id={req_data['material_id']}")
+            if inv_resp.status_code not in (200, 201, 204):
+                raise HTTPException(status_code=inv_resp.status_code, detail=f"Failed to update inventory ({inv_resp.status_code}): {inv_resp.text}")
             
         # 2. Update request status
         update_payload = {
@@ -1728,20 +1761,25 @@ async def allot_material(
             "notes": request.notes,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
-        try:
-            update_res = await asyncio.to_thread(
-                lambda: supabase.table("material_requests")
-                .update(update_payload)
-                .eq("id", request.request_id)
-                .execute()
+        async with httpx.AsyncClient() as client:
+            upd_resp = await client.patch(
+                f"{base_url}/rest/v1/material_requests",
+                params={"id": f"eq.{request.request_id}"},
+                json=update_payload,
+                headers={
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                timeout=10.0
             )
-            return {"status": "success", "data": update_res.data[0] if update_res.data else update_payload}
-        except Exception as upd_err:
-            err_str = str(upd_err)
-            if "Missing response" in err_str or "204" in err_str:
-                print(f"Material request status updated (204 silent): {request.request_id}")
-                return {"status": "success", "data": update_payload}
-            raise upd_err
+        
+        if upd_resp.status_code not in (200, 201, 204):
+            raise HTTPException(status_code=upd_resp.status_code, detail=f"Failed to update request status ({upd_resp.status_code}): {upd_resp.text}")
+            
+        upd_data = upd_resp.json() if upd_resp.status_code != 204 else update_payload
+        return {"status": "success", "data": upd_data[0] if isinstance(upd_data, list) and upd_data else upd_data}
         
     except HTTPException:
         raise
