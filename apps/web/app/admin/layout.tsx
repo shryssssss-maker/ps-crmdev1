@@ -176,6 +176,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       </p>
                       <p className="text-[11px] text-gray-400">Admin</p>
                     </div>
+                    <a
+                      href="/admin/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#2a2a2a]"
+                    >
+                      <UserCircle2 size={15} />
+                      My Profile
+                    </a>
                     <button
                       type="button"
                       onClick={handleLogout}
