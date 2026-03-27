@@ -1588,7 +1588,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         <div className="flex flex-col items-center justify-center h-full gap-6 p-6">
           <div className="flex flex-col items-center gap-2">
             <div
-              className="w-12 h-12 bg-[#C9A84C]"
+              className="w-20 h-20 bg-[#C9A84C]"
               style={{
                 WebkitMaskImage: 'url(/Emblem.svg)',
                 WebkitMaskSize: 'contain',
@@ -1649,7 +1649,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
             className={`w-full max-w-3xl mx-auto flex flex-col items-center px-4 shrink-0 transition-all duration-500 ease-in-out overflow-hidden transform origin-bottom ${isInitialView ? 'gap-6 opacity-100 max-h-[400px] mb-8 scale-100 translate-y-0 visible' : 'gap-0 opacity-0 max-h-0 mb-0 scale-95 -translate-y-8 invisible'}`}
           >
             <div
-              className="w-14 h-14 bg-[#C9A84C] shrink-0 transition-all duration-500"
+              className="w-32 h-32 bg-[#C9A84C] shrink-0 transition-all duration-500"
               style={{
                 WebkitMaskImage: 'url(/Emblem.svg)',
                 WebkitMaskSize: 'contain',
