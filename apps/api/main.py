@@ -32,14 +32,13 @@ from shared import (
     SEVERITY_MAP,
     REVERSE_GEOCODE_CACHE,
     ALLOWED_STATUSES,
-    DUPLICATE_LOOKBACK_HOURS,
     DUPLICATE_RADIUS_METERS,
     ISSUE_TYPE_AUTHORITY_KEYWORDS,
     NDMC_LOCALITY_HINTS,
     upload_image_to_supabase,
     reverse_geocode_from_coordinates,
     route_authority,
-    _find_recent_duplicate,
+    _find_active_spatial_duplicate,
     build_complaint_record,
     redis_client,
 )
@@ -147,11 +146,62 @@ def get_citizen_id_from_token(authorization: Optional[str]) -> str:
         payload_b64 += "=" * (4 - len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64))
         citizen_id = payload.get("sub")
-        if not citizen_id:
-            raise HTTPException(status_code=401, detail="JWT does not contain user id (sub).")
         return citizen_id
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Failed to decode JWT: {str(e)}")
+
+
+class ChatHistory(BaseModel):
+    messages: List[Dict[str, Any]]
+
+
+@app.get("/api/chat/history/{session_id}")
+async def get_chat_history(session_id: str):
+    """Retrieve chat history from Redis for a given session."""
+    if not redis_client:
+        return {"messages": []}
+    
+    try:
+        data = redis_client.get(f"chat:history:{session_id}")
+        if data:
+            return {"messages": json.loads(data)}
+        return {"messages": []}
+    except Exception as e:
+        print(f"Redis chat history read error: {e}")
+        return {"messages": []}
+
+
+@app.post("/api/chat/history/{session_id}")
+async def save_chat_history(session_id: str, history: ChatHistory):
+    """Save chat history to Redis with a 24-hour TTL."""
+    if not redis_client:
+        return {"status": "ok"}
+    
+    try:
+        # Store for 24 hours (persists across browser sessions while logged in)
+        redis_client.setex(
+            f"chat:history:{session_id}",
+            86400, 
+            json.dumps(history.messages)
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Redis chat history write error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save chat history")
+
+
+@app.delete("/api/chat/history/{session_id}")
+async def delete_chat_history(session_id: str):
+    """Delete chat history from Redis on logout."""
+    if not redis_client:
+        return {"status": "ok"}
+    
+    try:
+        redis_client.delete(f"chat:history:{session_id}")
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Redis chat history delete error: {e}")
+        return {"status": "ok"}
 
 
 
@@ -454,7 +504,7 @@ async def confirm(
 
     category = CHILD_CATEGORIES[child_id]
 
-    duplicate = _find_recent_duplicate(category_id=child_id, latitude=latitude, longitude=longitude)
+    duplicate = _find_active_spatial_duplicate(category_id=child_id, latitude=latitude, longitude=longitude)
     if duplicate and not force_submit:
         raise HTTPException(
             status_code=409,
@@ -591,6 +641,47 @@ async def confirm(
 # =========================================================
 # 8b. CITIZEN TICKETS (with Redis Caching & Delta support)
 # =========================================================
+
+@app.get("/citizen/nearby")
+async def get_citizen_nearby(authorization: Optional[str] = Header(None)):
+    """
+    Fetch all complaints for the nearby map, excluding the citizen's own tickets.
+    Cached in Redis.
+    """
+    citizen_id = get_citizen_id_from_token(authorization)
+    cache_key = "global:citizen:nearby_tickets"
+
+    if redis_client:
+        try:
+            cached_data = redis_client.get(cache_key)
+            if cached_data:
+                all_tickets = json.loads(cached_data)
+                filtered_tickets = [t for t in all_tickets if t.get("citizen_id") != citizen_id]
+                return {"source": "cache", "items": filtered_tickets}
+        except Exception as e:
+            print(f"Redis read error: {e}")
+
+    try:
+        response = supabase.table("complaints").select(
+            "id, ticket_id, title, description, severity, effective_severity, location, "
+            "photo_urls, upvote_count, status, created_at, address_text, ward_name, "
+            "category_id, assigned_department, citizen_id"
+        ).order("upvote_count", desc=True).limit(500).execute()
+        
+        all_tickets = response.data or []
+        
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 300, json.dumps(all_tickets)) # 5 minute cache
+            except Exception as e:
+                print(f"Redis write error: {e}")
+
+        filtered_tickets = [t for t in all_tickets if t.get("citizen_id") != citizen_id]
+        return {"source": "database", "items": filtered_tickets}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
+
+
 
 @app.get("/citizen/tickets")
 async def get_citizen_tickets(

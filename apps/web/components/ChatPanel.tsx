@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Plus, ChevronDown, ChevronUp, Mic, MicOff, Globe } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
+import { Mic, MicOff, Send, Plus, MapPin, CheckCircle2, ChevronDown, ChevronUp, Image as ImageIcon, Loader2, RefreshCw, X, Globe } from "lucide-react";
 import gsap from "gsap";
 import { sendToGemini } from "@/lib/gemini";
 import type { ChatMessage, ExtractedComplaint, GeminiResponse } from "@/lib/gemini";
 import { supabase } from "@/src/lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
+import { saveSharedState, getSharedState, clearSharedState } from "../lib/db";
 import dynamic from "next/dynamic";
 
 const LocationPinPicker = dynamic(() => import("@/components/LocationPinPicker"), {
@@ -567,7 +569,15 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [isInitialView, setIsInitialView] = useState(true);
+  const [skipAnimation, setSkipAnimation] = useState(false);
   const hasAnimatedRef = useRef(false);
+
+  // Instantly snap to bottom before browser paints if skipping animation
+  useLayoutEffect(() => {
+    if (!isInitialView && skipAnimation && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+    }
+  }, [isInitialView, skipAnimation]);
 
   // Initialize from localStorage on mount
   useEffect(() => {
@@ -583,6 +593,19 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       localStorage.setItem("jansamadhan_lang", selectedLanguage);
     }
   }, [selectedLanguage]);
+
+  // Prevent accidental navigation during rendering/processing
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isLoading || submitting || isTranscribing) {
+        e.preventDefault();
+        e.returnValue = "";
+        return "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isLoading, submitting, isTranscribing]);
 
   /* ----- refs ----- */
   const panelRef = useRef<HTMLDivElement>(null);
@@ -600,6 +623,155 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
 
   /* ----- conversation history for Gemini (role: user | model) ----- */
   const historyRef = useRef<ChatMessage[]>([]);
+  const sessionIdRef = useRef<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
+  const [isHistoryInitialized, setIsHistoryInitialized] = useState(false);
+
+  // Save pending UI flow state to IndexedDB 
+  useEffect(() => {
+    if (!userIdRef.current || !isHistoryInitialized) return;
+    const stateObj = {
+      pendingComplaint,
+      pendingImagePreview,
+      pendingImageFile,
+      pendingImageDataUrl,
+      pendingLocation,
+      duplicateContext,
+      locationConfirmed,
+      submitted
+    };
+    saveSharedState(`jansamadhan_pending_state_${userIdRef.current}`, stateObj).catch(console.error);
+  }, [pendingComplaint, pendingImagePreview, pendingImageFile, pendingImageDataUrl, pendingLocation, duplicateContext, locationConfirmed, submitted, isHistoryInitialized]);
+
+  // Initialize session and history — tied to logged-in user via localStorage
+  useEffect(() => {
+    const initializeChat = async () => {
+
+      // 1. Get current user to tie session to their account
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) {
+        setIsHistoryInitialized(true);
+        return;
+      }
+      userIdRef.current = userId;
+
+      // 2. Use user-specific key in localStorage (persists across tabs & reloads)
+      const storageKey = `jansamadhan_session_id_${userId}`;
+      let sid = localStorage.getItem(storageKey);
+      if (!sid) {
+        sid = crypto.randomUUID();
+        localStorage.setItem(storageKey, sid);
+      }
+      sessionIdRef.current = sid;
+
+      // 3. Fetch history from Redis via backend if we don't have messages yet
+      if (messages.length === 0) {
+        try {
+          const res = await fetch(`${API_URL}/api/chat/history/${sid}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.messages && data.messages.length > 0) {
+              setMessages(data.messages);
+              // Reconstruct historyRef for Gemini
+              historyRef.current = data.messages
+                .filter((m: DisplayMessage) => m.role === "user" || m.role === "bot")
+                .map((m: DisplayMessage) => ({
+                  role: m.role === "bot" ? "model" : "user",
+                  text: m.text,
+                }));
+
+              hasAnimatedRef.current = true; // Skip opening transition for loaded history
+              setSkipAnimation(true);
+              setIsInitialView(false);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch chat history:", err);
+        }
+      }
+      
+      // 4. Restore pending UI flow state if any (handles reloads cleanly)
+      try {
+        const savedState = await getSharedState(`jansamadhan_pending_state_${userId}`);
+        if (savedState) {
+          if (savedState.pendingComplaint !== undefined) setPendingComplaint(savedState.pendingComplaint);
+          if (savedState.pendingImagePreview !== undefined) setPendingImagePreview(savedState.pendingImagePreview);
+          if (savedState.pendingLocation !== undefined) setPendingLocation(savedState.pendingLocation);
+          if (savedState.duplicateContext !== undefined) setDuplicateContext(savedState.duplicateContext);
+          if (savedState.locationConfirmed !== undefined) setLocationConfirmed(savedState.locationConfirmed);
+          if (savedState.submitted !== undefined) setSubmitted(savedState.submitted);
+
+          // Only restore the image file if there's actually a confirmed preview waiting!
+          // This prevents stuck image thumbnails from interrupted network connections.
+          if (savedState.pendingImagePreview) {
+             if (savedState.pendingImageFile !== undefined) setPendingImageFile(savedState.pendingImageFile);
+             if (savedState.pendingImageDataUrl !== undefined) setPendingImageDataUrl(savedState.pendingImageDataUrl);
+          } else {
+             setPendingImageFile(null);
+             setPendingImageDataUrl(null);
+             clearSharedState(`jansamadhan_pending_state_${userId}`).catch(console.error);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to restore UI state", e);
+      }
+      
+      setIsHistoryInitialized(true);
+    };
+
+    initializeChat();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear chat history from Redis & localStorage on logout
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      if (event === "SIGNED_OUT") {
+        // Clear Redis-cached history
+        if (sessionIdRef.current) {
+          try {
+            await fetch(`${API_URL}/api/chat/history/${sessionIdRef.current}`, {
+              method: "DELETE",
+            });
+          } catch { /* best-effort cleanup */ }
+        }
+        
+        // Clear the specific user's session from localStorage
+        if (userIdRef.current) {
+          localStorage.removeItem(`jansamadhan_session_id_${userIdRef.current}`);
+          clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
+          userIdRef.current = null;
+        }
+        
+        sessionIdRef.current = null;
+
+        setMessages([]);
+        setIsInitialView(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync messages to Redis whenever they change
+  useEffect(() => {
+    const syncHistory = async () => {
+      if (!sessionIdRef.current || !isHistoryInitialized || messages.length === 0) return;
+      
+      try {
+        await fetch(`${API_URL}/api/chat/history/${sessionIdRef.current}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages }),
+        });
+      } catch (err) {
+        console.error("Failed to sync chat history:", err);
+      }
+    };
+
+    // Debounce sync slightly to avoid excessive writes
+    const timer = setTimeout(syncHistory, 1000);
+    return () => clearTimeout(timer);
+  }, [messages]);
 
   /* ----- helpers ----- */
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -802,6 +974,8 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         } catch (err) {
           const msg = toUserFacingError(err);
           addBotMessage(`⚠️ ${msg}`);
+          setPendingImageDataUrl(null); // Clear the image if the network request fails or drops!
+          setPendingImageFile(null);
         } finally {
           setIsLoading(false);
           setInput("");
@@ -978,6 +1152,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       const created = await res.json();
 
       setSubmitted(true);
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setPendingImagePreview(null);
       setPendingImageFile(null);
       setPendingImageDataUrl(null);
@@ -1002,8 +1177,9 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
 
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
 
       if (!user) {
         addBotMessage(t(selectedLanguage, "login_required"));
@@ -1049,6 +1225,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       }
 
       setSubmitted(true);
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setPendingComplaint(null);
       setPendingLocation(null);
       setDuplicateContext(null);
@@ -1076,6 +1253,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to upvote complaint");
 
+      if (userIdRef.current) clearSharedState(`jansamadhan_pending_state_${userIdRef.current}`).catch(console.error);
       setDuplicateContext(null);
       setPendingComplaint(null);
       setPendingImagePreview(null);
@@ -1332,7 +1510,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         <button onClick={() => fileInputRef.current?.click()} disabled={isLoading || submitting || isRecording || isTranscribing} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-500 transition-all duration-200 hover:bg-[#b4725a] hover:text-white hover:border-[#b4725a] hover:shadow-md disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-[#b4725a] focus:ring-offset-2 dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-400 dark:hover:bg-[#C9A84C] dark:hover:text-black dark:hover:border-[#C9A84C] dark:focus:ring-[#C9A84C] dark:focus:ring-offset-[#161616]" aria-label="Upload photo" title="Upload a photo of the issue">
           <Plus size={18} />
         </button>
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
         <button ref={micBtnRef} onClick={handleMicClick} disabled={isLoading || submitting || isTranscribing} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-40 ${isRecording ? "border-red-400 bg-red-500 text-white hover:bg-red-600 dark:border-red-500 dark:bg-red-600 dark:hover:bg-red-700 focus:ring-red-400 dark:focus:ring-red-500 dark:focus:ring-offset-[#161616]" : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-[#b4725a] hover:text-white hover:border-[#b4725a] hover:shadow-md dark:border-[#2a2a2a] dark:bg-[#1e1e1e] dark:text-gray-400 dark:hover:bg-[#C9A84C] dark:hover:text-black dark:hover:border-[#C9A84C] focus:ring-[#b4725a] dark:focus:ring-[#C9A84C] dark:focus:ring-offset-[#161616]"}`} aria-label={isRecording ? "Stop recording" : "Start voice input"} title={isRecording ? "Tap to stop recording" : "Tap to speak your complaint"}>
           {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
         </button>
@@ -1452,7 +1630,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
         <div className="flex flex-col items-center justify-center h-full gap-6 p-6">
           <div className="flex flex-col items-center gap-2">
             <div
-              className="w-12 h-12 bg-[#C9A84C]"
+              className="w-20 h-20 bg-[#C9A84C]"
               style={{
                 WebkitMaskImage: 'url(/Emblem.svg)',
                 WebkitMaskSize: 'contain',
@@ -1482,7 +1660,13 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
       )}
 
       {/* -- Unified View: Smoothly transitions from Claude-like welcome to active chat -- */}
-      {selectedLanguage && (
+      {selectedLanguage && !isHistoryInitialized && (
+        <div className="flex flex-col items-center justify-center h-full relative">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400/50" />
+        </div>
+      )}
+
+      {selectedLanguage && isHistoryInitialized && (
         <div className="flex flex-col h-full relative">
           {/* Top spacer for initial vertical centering */}
           <div 
@@ -1507,7 +1691,7 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
             className={`w-full max-w-3xl mx-auto flex flex-col items-center px-4 shrink-0 transition-all duration-500 ease-in-out overflow-hidden transform origin-bottom ${isInitialView ? 'gap-6 opacity-100 max-h-[400px] mb-8 scale-100 translate-y-0 visible' : 'gap-0 opacity-0 max-h-0 mb-0 scale-95 -translate-y-8 invisible'}`}
           >
             <div
-              className="w-14 h-14 bg-[#C9A84C] shrink-0 transition-all duration-500"
+              className="w-32 h-32 bg-[#C9A84C] shrink-0 transition-all duration-500"
               style={{
                 WebkitMaskImage: 'url(/Emblem.svg)',
                 WebkitMaskSize: 'contain',
@@ -1529,10 +1713,11 @@ export default function ChatPanel({ onClose: _onClose }: { onClose?: () => void 
           {/* Messages area (Expands when active) */}
           <div 
             ref={scrollRef} 
-            className={`w-full transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] min-h-0 overflow-y-auto px-4 ${isInitialView ? 'flex-[0_1_0%] opacity-0 h-0 py-0' : 'flex-[1_1_0%] opacity-100 py-3'}`}
-            style={{ display: 'flex', flexDirection: 'column' }}
+            className={`w-full min-h-0 overflow-y-auto px-4 ${skipAnimation ? "" : "transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]"} ${isInitialView ? "flex-[0_1_0%] opacity-0 h-0 py-0" : "flex-[1_1_0%] opacity-100 py-3"}`}
+            style={{ display: "flex", flexDirection: "column" }}
           >
-            <div ref={messagesAreaRef} className={`max-w-3xl mx-auto flex flex-col space-y-3 w-full transition-opacity duration-300 delay-300 ${isInitialView ? 'opacity-0' : 'opacity-100'}`}>
+            <div ref={messagesAreaRef} className={`max-w-3xl mx-auto flex flex-col space-y-3 min-h-full w-full ${skipAnimation ? "" : "transition-opacity duration-300 delay-300"} ${isInitialView ? "opacity-0" : "opacity-100"}`}>
+              <div className="flex-1 min-h-0"></div>
               {messagesContent}
             </div>
           </div>
