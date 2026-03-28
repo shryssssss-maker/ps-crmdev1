@@ -1,9 +1,9 @@
-@"
 # Node
-node_modules
-.next
-dist
-out
+node_modules/
+.next/
+dist/
+out/
+.turbo/
 
 # Env
 .env
@@ -12,6 +12,9 @@ out
 
 # Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Mac
 .DS_Store
@@ -19,5 +22,12 @@ out
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
-"@ | Set-Content .gitignore
+venv/
+env/
+
+# Models
+# We keep best.onnx in the repo for easy deployment to Railway as per user request
+# best.onnx

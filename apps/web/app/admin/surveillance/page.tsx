@@ -1,61 +1,233 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CameraCard, CameraData } from '@/components/admin-surveillance/CameraCard';
-import { AddCameraCard } from '@/components/admin-surveillance/AddCameraCard';
+import { supabase } from '@/src/lib/supabase';
+import { Loader2 } from 'lucide-react';
 
-const INITIAL_CAMERAS: CameraData[] = [
-  {
-    camera_id: 'cam-01',
-    camera_name: 'Main Gate Exit',
-    road_type: 'National Highway',
-    latitude: 28.6139,
-    longitude: 77.2090,
-    digipin: '88GHC9+22',
-    video_url: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
-    status: 'Idle',
-  },
-  {
-    camera_id: 'cam-02',
-    camera_name: 'Metro Pillar 42',
-    road_type: 'City Road',
-    latitude: 28.5355,
-    longitude: 77.3910,
-    digipin: '77FJD8+11',
-    video_url: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
-    status: 'Pending Verification',
-    verification_result: '',
+type SupabaseErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  status?: number;
+};
+
+const extractSupabaseError = (error: unknown): SupabaseErrorLike => {
+  if (!error || typeof error !== 'object') {
+    return { message: String(error) };
   }
-];
+  const e = error as Record<string, unknown>;
+  return {
+    message: typeof e.message === 'string' ? e.message : undefined,
+    code: typeof e.code === 'string' ? e.code : undefined,
+    details: typeof e.details === 'string' ? e.details : undefined,
+    hint: typeof e.hint === 'string' ? e.hint : undefined,
+    status: typeof e.status === 'number' ? e.status : undefined,
+  };
+};
+
+const getSupabaseHost = (): string => {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) return 'missing';
+  try {
+    return new URL(raw).host;
+  } catch {
+    return 'malformed';
+  }
+};
 
 export default function SurveillancePage() {
-  const [cameras, setCameras] = useState<CameraData[]>(INITIAL_CAMERAS);
+  const [cameras, setCameras] = useState<CameraData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleUpdateCamera = (id: string, updates: Partial<CameraData>) => {
+  useEffect(() => {
+    fetchCameras();
+  }, []);
+
+  const fetchCameras = async () => {
+    setIsLoading(true);
+    const { data, error } = await (supabase
+      .from('cctv_cameras' as any)
+      .select('*')
+      .order('created_at', { ascending: true }) as any);
+
+    if (error) {
+      console.error('[SURVEILLANCE][FETCH_CAMERAS_ERROR]', {
+        context: 'cctv_cameras.select',
+        supabaseHost: getSupabaseHost(),
+        error: extractSupabaseError(error),
+        rawError: error,
+      });
+    } else if (data) {
+      const mapped = data.map((cam: any) => ({
+        camera_id: cam.id,
+        camera_name: cam.name,
+        road_type: cam.road_type,
+        latitude: cam.latitude,
+        longitude: cam.longitude,
+        digipin: cam.digipin,
+        video_url: cam.video_url,
+        status: cam.last_status || 'Idle',
+        verification_result: cam.verification_result || undefined,
+      }));
+      setCameras(mapped);
+    }
+    setIsLoading(false);
+  };
+
+  const handleUpdateCamera = async (id: string, updates: Partial<CameraData>) => {
+    // Optimistic update
     setCameras(prev => prev.map(cam => 
       cam.camera_id === id ? { ...cam, ...updates } : cam
     ));
-  };
 
-  const handleDeleteCamera = (id: string) => {
-    if (confirm("Are you sure you want to delete this surveillance node?")) {
-      setCameras(prev => prev.filter(cam => cam.camera_id !== id));
+    // Persist to DB if the changes are metadata related
+    const dbUpdates: any = {};
+    if (updates.camera_name) dbUpdates.name = updates.camera_name;
+    if (updates.road_type) dbUpdates.road_type = updates.road_type;
+    if (updates.latitude) dbUpdates.latitude = updates.latitude;
+    if (updates.longitude) dbUpdates.longitude = updates.longitude;
+    if (updates.digipin) dbUpdates.digipin = updates.digipin;
+    if (updates.status) dbUpdates.last_status = updates.status;
+    if (updates.verification_result) dbUpdates.verification_result = updates.verification_result;
+
+    if (Object.keys(dbUpdates).length > 0) {
+      await supabase.from('cctv_cameras' as any).update(dbUpdates).eq('id', id);
     }
   };
 
-  const handleAddCamera = () => {
-    const newCamera: CameraData = {
-      camera_id: crypto.randomUUID(),
-      camera_name: 'New Camera Node',
-      road_type: 'City Road',
-      latitude: 28.0000,
-      longitude: 77.0000,
-      digipin: '',
-      video_url: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
-      status: 'Idle',
-    };
-    setCameras(prev => [...prev, newCamera]);
+  const handleDeleteCamera = async (id: string) => {
+    if (confirm("Are you sure you want to delete this surveillance node?")) {
+      const { error } = await supabase
+        .from('cctv_cameras' as any)
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        alert('Failed to delete camera: ' + error.message);
+      } else {
+        setCameras(prev => prev.filter(cam => cam.camera_id !== id));
+      }
+    }
   };
+
+  const handleSaveNewCamera = async (newCam: CameraData, file: File) => {
+    setIsLoading(true);
+    try {
+      // 1. Upload video to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `cctv_footage/${fileName}`;
+
+      let uploadError: any = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const uploadResult = await supabase.storage
+            .from('cctv-videos')
+            .upload(filePath, file, { upsert: true });
+          uploadError = uploadResult.error;
+          if (!uploadError) break;
+
+          console.error('[SURVEILLANCE][UPLOAD_ERROR]', {
+            attempt,
+            bucket: 'cctv-videos',
+            filePath,
+            supabaseHost: getSupabaseHost(),
+            error: extractSupabaseError(uploadError),
+            rawError: uploadError,
+          });
+
+          // Retry once only for transient fetch/network issues
+          const msg = uploadError?.message || '';
+          const shouldRetry = attempt === 1 && /failed to fetch|network|fetch/i.test(msg);
+          if (!shouldRetry) break;
+        } catch (err) {
+          const isNetworkError = err instanceof TypeError;
+          console.error('[SURVEILLANCE][UPLOAD_RUNTIME_ERROR]', {
+            attempt,
+            bucket: 'cctv-videos',
+            filePath,
+            supabaseHost: getSupabaseHost(),
+            isNetworkError,
+            message: err instanceof Error ? err.message : String(err),
+            rawError: err,
+          });
+
+          if (!(isNetworkError && attempt === 1)) {
+            throw err;
+          }
+        }
+      }
+
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message || 'Unknown upload error'}`);
+      }
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('cctv-videos')
+        .getPublicUrl(filePath);
+
+      // 3. Insert metadata into DB
+      const { data, error } = await (supabase
+        .from('cctv_cameras' as any)
+        .insert({
+          name: newCam.camera_name,
+          road_type: newCam.road_type,
+          latitude: newCam.latitude,
+          longitude: newCam.longitude,
+          digipin: newCam.digipin,
+          video_url: publicUrl,
+          last_status: 'Idle'
+        })
+        .select()
+        .single() as any);
+
+      if (error) {
+        console.error('[SURVEILLANCE][DB_INSERT_ERROR]', {
+          context: 'cctv_cameras.insert',
+          supabaseHost: getSupabaseHost(),
+          payloadPreview: {
+            name: newCam.camera_name,
+            road_type: newCam.road_type,
+            latitude: newCam.latitude,
+            longitude: newCam.longitude,
+            digipin: newCam.digipin,
+            video_url_present: Boolean(publicUrl),
+          },
+          error: extractSupabaseError(error),
+          rawError: error,
+        });
+        throw new Error(`DB Insert failed: ${error.message}`);
+      }
+
+      if (data) {
+        // Force refresh from DB to avoid stale in-memory IDs.
+        await fetchCameras();
+      }
+    } catch (err: any) {
+      const isNetworkError = err instanceof TypeError || /failed to fetch/i.test(err?.message || '');
+      if (isNetworkError) {
+        console.error('[SURVEILLANCE][NETWORK_FAILURE]', {
+          message: err?.message,
+          supabaseHost: getSupabaseHost(),
+        });
+      }
+      alert(err.message);
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-[#161616]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#C9A84C]" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50 dark:bg-[#161616]">
@@ -67,16 +239,29 @@ export default function SurveillancePage() {
               data={camera}
               onUpdate={handleUpdateCamera}
               onDelete={handleDeleteCamera}
+              onAnalyzeNotFound={fetchCameras}
             />
-          ))}
-          
-          <AddCameraCard onClick={handleAddCamera} />
+          ))}          
+          {/* Permanent Add Camera Card */}
+          <CameraCard
+            isAddMode
+            data={{
+              camera_name: '',
+              road_type: 'City Road',
+              latitude: 0,
+              longitude: 0,
+              digipin: '',
+              video_url: '',
+              status: 'Idle'
+            }}
+            onSave={handleSaveNewCamera}
+          />
         </div>
         
         {cameras.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-gray-500 dark:text-gray-400 font-medium">No surveillance nodes active.</p>
-            <p className="text-xs text-gray-400">Click the "Add New Camera" card to begin monitoring.</p>
+          <div className="mt-12 text-center">
+            <p className="text-gray-500 dark:text-gray-400 font-medium">No active surveillance nodes.</p>
+            <p className="text-xs text-gray-400">Use the card above to register a new camera point.</p>
           </div>
         )}
       </div>

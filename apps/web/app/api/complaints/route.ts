@@ -5,7 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/src/types/database.types";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -490,6 +491,7 @@ export async function POST(req: NextRequest) {
 
   // --- Send Email Notification via Resend ---
   try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const authorityEmail = "hackthondb@gmail.com"; // Default for now
     const emailHtml = `
       <!DOCTYPE html>
