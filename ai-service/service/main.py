@@ -23,21 +23,33 @@ MODEL_PATH = os.getenv("MODEL_PATH", DEFAULT_MODEL)
 def download_model_if_missing():
     """
     If the model file is missing, try to download it from a URL provided in MODEL_URL.
-    This solves the GitHub 100MB push limit issue.
+    Automatically handles Google Drive links by converting them to direct download format.
     """
     model_path = Path(MODEL_PATH)
     model_url = os.getenv("MODEL_URL")
     
     if not model_path.exists() and model_url:
-        print(f"DEBUG: Model file not found at {model_path}. Attempting download from {model_url}...")
+        print(f"DEBUG: Model file not found. Attempting download from {model_url}...")
+        
+        # 1. Transform Google Drive links to direct download links
+        if "drive.google.com" in model_url:
+            if "/file/d/" in model_url:
+                file_id = model_url.split("/file/d/")[1].split("/")[0]
+                model_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+            elif "id=" in model_url:
+                file_id = model_url.split("id=")[1].split("&")[0]
+                model_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+
         try:
             import requests
             model_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"DEBUG: Using direct URL: {model_url}")
             response = requests.get(model_url, stream=True, timeout=300)
             response.raise_for_status()
             with open(model_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    if chunk: # filter out keep-alive new chunks
+                        f.write(chunk)
             print(f"DEBUG: Model downloaded successfully to {model_path}")
         except Exception as e:
             print(f"ERROR: Failed to download model: {e}")
