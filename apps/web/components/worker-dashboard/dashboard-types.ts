@@ -17,6 +17,7 @@ export type DashboardTask = {
   latitude: number | null
   longitude: number | null
   distanceKm: number | null
+  cameraId: string | null   // set on CCTV-generated tickets — used to trigger Pending Verification
 }
 
 export type DashboardStats = {
