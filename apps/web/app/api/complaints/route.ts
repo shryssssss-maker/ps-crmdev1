@@ -3,6 +3,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/src/types/database.types";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -484,7 +488,75 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // --- Send Email Notification via Resend ---
+  try {
+    const authorityEmail = "hackthondb@gmail.com"; // Default for now
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 20px auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+          .header { background-color: #161616; padding: 32px 20px; text-align: center; border-bottom: 4px solid #C9A84C; }
+          .logo { color: #C9A84C; font-size: 24px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }
+          .content { padding: 40px 30px; background-color: #ffffff; }
+          .greeting { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111; }
+          .summary { margin-bottom: 32px; color: #4b5563; }
+          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 32px; border-radius: 8px; overflow: hidden; border: 1px solid #f3f4f6; }
+          .details-table th { background-color: #f9fafb; padding: 12px 16px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; border-bottom: 1px solid #f3f4f6; width: 35%; }
+          .details-table td { padding: 12px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #f3f4f6; }
+          .highlight { font-weight: 600; color: #C9A84C; }
+          .btn-container { text-align: center; margin-top: 20px; }
+          .btn { background-color: #C9A84C; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block; transition: background-color 0.2s; }
+          .footer { background-color: #f9fafb; padding: 24px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">JanSamadhan</div>
+            <div style="color: #9ca3af; font-size: 10px; margin-top: 4px;">OFFICIAL GRIEVANCE PORTAL</div>
+          </div>
+          <div class="content">
+            <div class="greeting">New Complaint Registered</div>
+            <p class="summary">A new complaint has been filed and assigned to your department. Please review the details below and take appropriate action within the SLA timelines.</p>
+            
+            <table class="details-table">
+              <tr><th>Ticket ID</th><td class="highlight">${data.ticket_id}</td></tr>
+              <tr><th>Severity</th><td>${canonicalComplaint.severity}</td></tr>
+              <tr><th>Department</th><td>${canonicalComplaint.authority}</td></tr>
+              <tr><th>Issue</th><td>${title}</td></tr>
+              <tr><th>Location</th><td>${resolvedWard}, ${resolvedCity}</td></tr>
+              <tr><th>Address</th><td>${resolvedAddress}</td></tr>
+            </table>
+
+            <div class="btn-container">
+              <a href="https://jansamadhan.perkkk.dev/authority" class="btn">View in Dashboard</a>
+            </div>
+          </div>
+          <div class="footer">
+            © ${new Date().getFullYear()} JanSamadhan Portal. This is an automated notification.<br>
+            Please do not reply to this email.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: authorityEmail,
+      subject: `[New Complaint] ${data.ticket_id}: ${title}`,
+      html: emailHtml,
+    });
+  } catch (emailErr) {
+    console.error("Failed to send notification email:", emailErr);
+  }
+
   return NextResponse.json({ success: true, complaint: data }, { status: 201 });
+
 }
 
 /**

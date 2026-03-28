@@ -482,41 +482,43 @@ export default function ManualReportForm() {
           .toString()
           .padStart(3, "0")}`;
 
-        /* 4. insert */
+        /* 4. insert via API route to trigger email notification */
         const cat = childMap.get(selectedCategoryId)!;
         const sev = SEVERITIES[severityIdx];
 
-        const { data, error: insertErr } = await supabase
-          .from("complaints")
-          .insert({
-            ticket_id: ticketId,
+        const res = await fetch("/api/complaints", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             citizen_id: user.id,
             category_id: cat.id,
             title: title.trim(),
             description: description.trim(),
             severity: sev.value,
-            effective_severity: sev.value,
-            status: "submitted",
-            location: `SRID=4326;POINT(${lng} ${lat})`,
+            latitude: lat,
+            longitude: lng,
             address_text: addressText.trim() || `Lat ${lat.toFixed(6)}, Lng ${lng.toFixed(6)}`,
             city: "Delhi",
-            assigned_department: cat.department,
-            photo_urls: photoUrls.length > 0 ? photoUrls : null,
-            photo_count: photoUrls.length,
-          })
-          .select("id, ticket_id")
-          .single();
+            photo_urls: photoUrls,
+            force_submit: true, // Manual form submissions are explicit
+          }),
+        });
 
-        if (insertErr) {
-          setError(insertErr.message);
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || "Failed to submit complaint.");
           setSubmitting(false);
           return;
         }
 
+        const complaint = data.complaint;
+
         setSuccess({
-          ticketId: data.ticket_id ?? ticketId,
-          complaintId: data.id,
+          ticketId: complaint.ticket_id || ticketId,
+          complaintId: complaint.id,
         });
+
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Something went wrong."

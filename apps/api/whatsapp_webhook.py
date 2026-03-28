@@ -21,9 +21,10 @@ import urllib.parse
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
-
+import asyncio
 
 import httpx
+
 from fastapi import APIRouter, Request, Response, HTTPException
 from PIL import Image
 
@@ -40,7 +41,9 @@ from shared import (
     route_authority,
     _find_active_spatial_duplicate,
     build_complaint_record,
+    send_resend_email,
 )
+
 
 # ── config ────────────────────────────────────────────────────────────────────
 WHATSAPP_TOKEN           = os.getenv("WHATSAPP_TOKEN", "")
@@ -353,6 +356,18 @@ async def confirm_ticket(phone: str, session: dict):
         f"🔗 https://jansamadhan.perkkk.dev/citizen\n\n"
         f"Thank you for helping improve your city! 🙏"
     )
+
+    # --- Background Email Notification ---
+    asyncio.create_task(send_resend_email(
+        ticket_id=ticket_id,
+        title=preview["title"],
+        authority=routed_authority,
+        severity=preview["severity_db"],
+        ward=location.get("locality") or "Unknown",
+        city=location.get("city") or "Delhi",
+        address=address_text
+    ))
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

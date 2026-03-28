@@ -21,6 +21,7 @@ from supabase import create_client, Client
 from google import genai
 from dotenv import load_dotenv
 import redis
+import httpx
 
 
 # =========================================================
@@ -39,8 +40,112 @@ GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY")
 GEMINI_PRIMARY_MODEL = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-2.5-flash")
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash")
 MAPPLS_API_KEY = os.getenv("MAPPLS_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+
+async def send_resend_email(ticket_id: str, title: str, authority: str, severity: str, ward: str, city: str, address: str):
+    """Sends an official aesthetic email notification via Resend REST API."""
+    if not RESEND_API_KEY:
+        print("[Resend] API key missing, skipping email.")
+        return
+
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    
+    current_year = datetime.now().year
+    email_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
+        .container {{ max-width: 600px; margin: 20px auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+        .header {{ background-color: #161616; padding: 32px 20px; text-align: center; border-bottom: 4px solid #C9A84C; }}
+        .logo {{ color: #C9A84C; font-size: 24px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }}
+        .content {{ padding: 40px 30px; background-color: #ffffff; }}
+        .greeting {{ font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111; }}
+        .summary {{ margin-bottom: 32px; color: #4b5563; }}
+        .details-table {{ width: 100%; border-collapse: collapse; margin-bottom: 32px; border-radius: 8px; overflow: hidden; border: 1px solid #f3f4f6; }}
+        .details-table th {{ background-color: #f9fafb; padding: 12px 16px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; border-bottom: 1px solid #f3f4f6; width: 35%; }}
+        .details-table td {{ padding: 12px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #f3f4f6; }}
+        .highlight {{ font-weight: 600; color: #C9A84C; }}
+        .btn-container {{ text-align: center; margin-top: 20px; }}
+        .btn {{ background-color: #C9A84C; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block; }}
+        .footer {{ background-color: #f9fafb; padding: 24px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">JanSamadhan</div>
+          <div style="color: #9ca3af; font-size: 10px; margin-top: 4px;">OFFICIAL GRIEVANCE PORTAL</div>
+        </div>
+        <div class="content">
+          <div class="greeting">New Complaint Registered</div>
+          <p class="summary">A new complaint has been filed and assigned to your department. Please review the details below and take appropriate action within the SLA timelines.</p>
+          
+          <table class="details-table">
+            <tr><th>Ticket ID</th><td class="highlight">{ticket_id}</td></tr>
+            <tr><th>Severity</th><td>{severity}</td></tr>
+            <tr><th>Department</th><td>{authority}</td></tr>
+            <tr><th>Issue</th><td>{title}</td></tr>
+            <tr><th>Location</th><td>{ward}, {city}</td></tr>
+            <tr><th>Address</th><td>{address}</td></tr>
+          </table>
+
+          <div class="btn-container">
+            <a href="https://jansamadhan.perkkk.dev/authority" class="btn">View in Dashboard</a>
+          </div>
+        </div>
+        <div class="footer">
+          © {current_year} JanSamadhan Portal. This is an automated notification.<br>
+          Please do not reply to this email.
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    payload = {
+        "from": "onboarding@resend.dev",
+        "to": "hackthondb@gmail.com",
+        "subject": f"[New Complaint] {ticket_id}: {title}",
+        "html": email_html,
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code not in (200, 201):
+                print(f"[Resend Error] {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Resend Exception] {e}")
+
+
+
+# =========================================================
+# 1. CONFIGURATION
+# =========================================================
+
+try:
+    ROOT_DIR = Path(__file__).resolve().parents[2]
+except IndexError:
+    ROOT_DIR = Path(__file__).resolve().parent  # Docker: /app
+load_dotenv(ROOT_DIR / ".env", override=False)
+load_dotenv(ROOT_DIR / "apps" / "api" / ".env", override=False)
+load_dotenv(ROOT_DIR / "apps" / "web" / ".env.local", override=False)
+
+GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY")
+GEMINI_PRIMARY_MODEL = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-2.5-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash")
+MAPPLS_API_KEY = os.getenv("MAPPLS_API_KEY")
+_raw_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_URL = _raw_url.strip().rstrip("/") if _raw_url else None
+_raw_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY = _raw_key.strip() if _raw_key else None
 
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set.")

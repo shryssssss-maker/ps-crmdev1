@@ -42,10 +42,16 @@ from shared import (
     _find_active_spatial_duplicate,
     build_complaint_record,
     redis_client,
+    send_resend_email,
 )
+
+# Global constants for direct Supabase REST API calls (bypassing supabase-py bugs)
+SERVICE_BASE_URL = SUPABASE_URL
+SERVICE_API_KEY = SUPABASE_SERVICE_KEY
 
 
 # =========================================================
+
 # 2. FASTAPI INITIALIZATION
 # =========================================================
 
@@ -710,6 +716,19 @@ async def confirm(
         image_metadata=img_metadata,
     )
 
+    # --- Background Email Notification ---
+    asyncio.create_task(send_resend_email(
+        ticket_id=inserted.get("ticket_id") or inserted["id"],
+        title=title,
+        authority=routed_authority,
+        severity=severity_db,
+        ward=derived_ward_name,
+        city=complaint_record.get("city", "Delhi"),
+        address=address_text
+    ))
+
+    return response_obj
+
 
 # =========================================================
 # 8b. CITIZEN TICKETS (with Redis Caching & Delta support)
@@ -1290,8 +1309,10 @@ async def assign_complaint(
             try:
                 # 1. Dashboard for THIS user (authority)
                 redis_client.delete(f"authority:dashboard:{user_id}")
-                # 2. Admin complaints list (since assignment/status changed)
-                redis_client.delete("admin:complaints:list")
+                # 2. Admin complaints list (Flush all since page/filters are dynamic)
+                # Note: deleting the invalid key "admin:complaints:list"
+                for key in redis_client.scan_iter("admin:complaints:*"):
+                    redis_client.delete(key)
             except Exception as e:
                 print(f"Redis invalidation failed: {e}")
 
@@ -1721,6 +1742,9 @@ async def get_worker_dashboard(
             print(f"Redis read error: {e}")
 
     # Step 1: Verify worker role
+    if not worker_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         profile_res = await asyncio.to_thread(
             lambda: supabase.table("profiles")
@@ -1894,21 +1918,17 @@ async def create_material_request(
     worker_id = get_citizen_id_from_token(authorization)
     
     try:
-        # Trim whitespace from URL and keys if any
-        base_url = SUPABASE_URL.strip().rstrip("/")
-        api_key = SUPABASE_SERVICE_KEY.strip()
-
         # 1. Verify worker is assigned to this complaint using direct REST API
         async with httpx.AsyncClient() as client:
             comp_resp = await client.get(
-                f"{base_url}/rest/v1/complaints",
+                f"{SERVICE_BASE_URL}/rest/v1/complaints",
                 params={
                     "id": f"eq.{request.complaint_id}",
                     "select": "id,assigned_worker_id"
                 },
                 headers={
-                    "apikey": api_key,
-                    "Authorization": f"Bearer {api_key}"
+                    "apikey": SERVICE_API_KEY,
+                    "Authorization": f"Bearer {SERVICE_API_KEY}"
                 },
                 timeout=10.0
             )
@@ -1934,18 +1954,14 @@ async def create_material_request(
             "notes": request.notes
         }
         
-        # Trim whitespace from URL and keys if any
-        base_url = SUPABASE_URL.strip().rstrip("/")
-        api_key = SUPABASE_SERVICE_KEY.strip()
-        
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"{base_url}/rest/v1/material_requests",
+                    f"{SERVICE_BASE_URL}/rest/v1/material_requests",
                     json=insert_payload,
                     headers={
-                        "apikey": api_key,
-                        "Authorization": f"Bearer {api_key}",
+                        "apikey": SERVICE_API_KEY,
+                        "Authorization": f"Bearer {SERVICE_API_KEY}",
                         "Content-Type": "application/json",
                         "Prefer": "return=representation",
                     },
@@ -1991,21 +2007,18 @@ async def get_authority_material_requests(
     get_citizen_id_from_token(authorization)
     
     try:
-        base_url = SUPABASE_URL.strip().rstrip("/")
-        api_key = SUPABASE_SERVICE_KEY.strip()
-
         # Authority sees pending material requests using direct REST API
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"{base_url}/rest/v1/material_requests",
+                f"{SERVICE_BASE_URL}/rest/v1/material_requests",
                 params={
                     "status": "eq.pending",
                     "select": "*,profiles:worker_id(full_name),complaints(ticket_id),warehouse_inventory(name,unit)",
                     "order": "created_at.desc"
                 },
                 headers={
-                    "apikey": api_key,
-                    "Authorization": f"Bearer {api_key}"
+                    "apikey": SERVICE_API_KEY,
+                    "Authorization": f"Bearer {SERVICE_API_KEY}"
                 },
                 timeout=10.0
             )
@@ -2029,20 +2042,17 @@ async def allot_material(
     get_citizen_id_from_token(authorization)
     
     try:
-        base_url = SUPABASE_URL.strip().rstrip("/")
-        api_key = SUPABASE_SERVICE_KEY.strip()
-
         # 1. Get the request details
         async with httpx.AsyncClient() as client:
             req_resp = await client.get(
-                f"{base_url}/rest/v1/material_requests",
+                f"{SERVICE_BASE_URL}/rest/v1/material_requests",
                 params={
                     "id": f"eq.{request.request_id}",
                     "select": "*,warehouse_inventory(available_quantity)"
                 },
                 headers={
-                    "apikey": api_key,
-                    "Authorization": f"Bearer {api_key}"
+                    "apikey": SERVICE_API_KEY,
+                    "Authorization": f"Bearer {SERVICE_API_KEY}"
                 },
                 timeout=10.0
             )
@@ -2066,12 +2076,12 @@ async def allot_material(
             # Decrement inventory using httpx
             async with httpx.AsyncClient() as client:
                 inv_resp = await client.patch(
-                    f"{base_url}/rest/v1/warehouse_inventory",
+                    f"{SERVICE_BASE_URL}/rest/v1/warehouse_inventory",
                     params={"id": f"eq.{req_data['material_id']}"},
                     json={"available_quantity": available - req_data["requested_quantity"]},
                     headers={
-                        "apikey": api_key,
-                        "Authorization": f"Bearer {api_key}",
+                        "apikey": SERVICE_API_KEY,
+                        "Authorization": f"Bearer {SERVICE_API_KEY}",
                         "Content-Type": "application/json"
                     },
                     timeout=10.0
@@ -2087,12 +2097,12 @@ async def allot_material(
         }
         async with httpx.AsyncClient() as client:
             upd_resp = await client.patch(
-                f"{base_url}/rest/v1/material_requests",
+                f"{SERVICE_BASE_URL}/rest/v1/material_requests",
                 params={"id": f"eq.{request.request_id}"},
                 json=update_payload,
                 headers={
-                    "apikey": api_key,
-                    "Authorization": f"Bearer {api_key}",
+                    "apikey": SERVICE_API_KEY,
+                    "Authorization": f"Bearer {SERVICE_API_KEY}",
                     "Content-Type": "application/json",
                     "Prefer": "return=representation"
                 },
