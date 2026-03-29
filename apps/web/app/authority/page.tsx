@@ -221,10 +221,14 @@ export default function AuthorityDashboardPage() {
     try {
       const cached = localStorage.getItem(CACHE_KEY)
       if (cached) {
-        applyPayload(JSON.parse(cached))
+        const parsed = JSON.parse(cached)
+        applyPayload(parsed)
         setLoading(false)
       }
-    } catch {}
+    } catch (err) {
+      console.warn("Outdated or malformed dashboard cache detected, clearing:", err)
+      try { localStorage.removeItem(CACHE_KEY) } catch {}
+    }
   }, [applyPayload])
 
   // 2. Fresh fetch

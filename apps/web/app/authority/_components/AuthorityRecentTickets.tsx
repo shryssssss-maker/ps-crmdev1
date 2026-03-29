@@ -109,7 +109,11 @@ export default function AuthorityRecentTickets({ complaints, workers, loading, e
                 <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-400">No active tickets</td></tr>
               ) : rows.map(c => {
                 const sev         = getSeverityConfig(c.effective_severity)
-                const st          = STATUS_META[c.status]
+                const st          = STATUS_META[c.status] || {
+                  label: "Unknown",
+                  badge: "bg-gray-100 text-gray-500 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-400",
+                  step: 0
+                }
                 const stage       = stageInfo(c, workers)
                 const slaBreached = isBreached(c.sla_deadline, c.status)
 
