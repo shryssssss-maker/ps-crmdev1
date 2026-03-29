@@ -14,7 +14,7 @@ from typing import Optional, Dict, List, Any
 from math import radians, sin, cos, sqrt, atan2
 import httpx
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from PIL import Image
@@ -77,7 +77,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "x-request-id"],
 )
 
 
@@ -189,16 +189,6 @@ class ComplaintAssignRequest(BaseModel):
 class CameraAnalyzeRequest(BaseModel):
     camera_id: str
 
-
-@app.options("/cctv/analyze_live")
-async def cctv_analyze_live_options() -> Response:
-    # Explicitly handle preflight with 204 No Content
-    headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-request-id",
-    }
-    return Response(status_code=204, headers=headers)
 
 
 @app.post("/cctv/analyze_live")
