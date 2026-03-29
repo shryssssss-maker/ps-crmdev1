@@ -203,7 +203,10 @@ async def cctv_analyze_live(
     if not AI_SERVICE_URL:
         raise HTTPException(status_code=503, detail="AI Service not configured on backend.")
 
-    target_url = f"{AI_SERVICE_URL.rstrip('/')}/cctv/analyze_live"
+    base_url = AI_SERVICE_URL.strip()
+    if not base_url.startswith(("http://", "https://")):
+        base_url = f"https://{base_url}"
+    target_url = f"{base_url.rstrip('/')}/cctv/analyze_live"
     
     async with httpx.AsyncClient() as client:
         try:
