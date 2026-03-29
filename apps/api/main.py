@@ -187,6 +187,10 @@ class ComplaintAssignRequest(BaseModel):
     status: str
 
 
+class ClosureConfirmationRequest(BaseModel):
+    complaint_id: str
+
+
 class CameraAnalyzeRequest(BaseModel):
     camera_id: str
 

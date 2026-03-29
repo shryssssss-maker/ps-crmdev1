@@ -498,10 +498,12 @@ export default function WorkerDashboardPage() {
         }
       }
 
-      // 2. Update complaint status → in_progress + store proof URL
-      //    The ticket stays open until the Admin verifies via the Surveillance card.
+      // 2. Set next status based on whether it is a CCTV-ticket or normal
+      const nextStatus = displayTask.cameraId ? 'in_progress' : 'pending_closure'
+
+      // 3. Update complaint status + store proof URL
       const updatePayload: Record<string, unknown> = {
-        status: 'in_progress',
+        status: nextStatus,
       }
       if (proofPhotoUrl) updatePayload['proof_photo_url'] = proofPhotoUrl
 
@@ -516,9 +518,28 @@ export default function WorkerDashboardPage() {
         return
       }
 
-      // 3. If this is a CCTV ticket, trigger Pending Verification on the camera card
+      // 4. Trigger Notifications if normal ticket
+      if (!displayTask.cameraId) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+            await fetch(`${apiUrl}/api/notify/closure-confirmation`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ complaint_id: displayTask.id }),
+            })
+          }
+        } catch (err) {
+          console.error("WhatsApp notification failed (non-blocking):", err)
+        }
+      }
+
+      // 5. If this is a CCTV ticket, trigger Pending Verification on the camera card
       if (displayTask.cameraId) {
-        // cctv_cameras is not in the generated DB types — use explicit cast
         const sbAny = supabase as any
         const { error: camErr } = await sbAny
           .from('cctv_cameras')
@@ -529,14 +550,14 @@ export default function WorkerDashboardPage() {
         }
       }
 
-      // 4. Log to ticket_history
+      // 6. Log to ticket_history
       if (workerId) {
         await supabase.from('ticket_history').insert({
           changed_by: workerId,
           complaint_id: displayTask.id,
           old_status: displayTask.status,
-          new_status: 'in_progress',
-          note: completionNote || 'Worker marked repair complete. Awaiting CCTV verification.',
+          new_status: nextStatus,
+          note: completionNote || (displayTask.cameraId ? 'Worker marked repair complete. Awaiting CCTV verification.' : 'Worker marked complete. Awaiting citizen confirmation.'),
           is_internal: false,
         })
       }
@@ -655,7 +676,7 @@ export default function WorkerDashboardPage() {
               </p>
             ) : (
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                Ticket {displayTask.ticketId} will be marked for verification.
+                Ticket {displayTask.ticketId} will be sent to the citizen for confirmation before final closure.
               </p>
             )}
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Complete Ticket</h3>
