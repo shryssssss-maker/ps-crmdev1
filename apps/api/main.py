@@ -14,7 +14,8 @@ from typing import Optional, Dict, List, Any
 from math import radians, sin, cos, sqrt, atan2
 import httpx
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response, JSONResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from PIL import Image
