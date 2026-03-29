@@ -14,7 +14,7 @@ WORKDIR /app
 COPY ai-service/requirements.txt .
 
 # Install dependencies (using --no-cache-dir to save space)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
 # Copy the rest of the application code
 COPY ai-service/ .
