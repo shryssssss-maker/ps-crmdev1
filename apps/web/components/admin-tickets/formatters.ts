@@ -5,6 +5,7 @@ export function formatStatusLabel(status: ComplaintStatus): string {
   if (status === "under_review") return "Pending"
   if (status === "submitted") return "Pending"
   if (status === "assigned") return "Pending"
+  if (status === "reopened") return "Reopened"
   if (status === "resolved") return "Resolved"
   if (status === "escalated") return "Escalated"
   if (status === "rejected") return "Rejected"
