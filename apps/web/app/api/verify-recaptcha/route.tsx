@@ -7,6 +7,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, message: 'No token provided' }, { status: 400 });
   }
 
+  // Handle local development bypass
+  if (token === 'dev_mock_token' && process.env.NODE_ENV === 'development') {
+    return NextResponse.json({ success: true });
+  }
+
   const secretKey = process.env.RECAPTCHA_SECRET_KEY?.trim();
   if (!secretKey) {
     return NextResponse.json(

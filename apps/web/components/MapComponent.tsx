@@ -269,7 +269,7 @@ export default function MapComponent({
     };
   }, []);
 
-  if (!mounted) return null;
+  if (!mounted || !leaflet || typeof window === 'undefined') return null;
 
   const getSeverityIcon = (severity: string, L: any) => {
     const level = normalizeSeverityLevel(severity);

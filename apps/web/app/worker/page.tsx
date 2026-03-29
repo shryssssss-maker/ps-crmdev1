@@ -42,6 +42,7 @@ type ComplaintWithCategory = {
   resolved_at: string | null
   location: unknown
   categories: { name: string } | null
+  camera_id: string | null  // present on CCTV auto-generated tickets
 }
 
 type ProfileAccessRow = {
@@ -88,6 +89,7 @@ function transformPayload(payload: WorkerDashboardPayload) {
         latitude: complaintLocation?.lat ?? null,
         longitude: complaintLocation?.lng ?? null,
         distanceKm,
+        cameraId: complaint.camera_id ?? null,
       } satisfies DashboardTask
     })
 
@@ -129,6 +131,8 @@ export default function WorkerDashboardPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false)
   const [completionNote, setCompletionNote] = useState("")
+  const [proofPhoto, setProofPhoto] = useState<File | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const applyPayload = useCallback((payload: WorkerDashboardPayload) => {
     const result = transformPayload(payload)
@@ -474,9 +478,100 @@ export default function WorkerDashboardPage() {
 
   async function handleConfirmComplete() {
     if (!displayTask) return
-    await handleCompleteTask(displayTask.id)
-    setIsCompletionModalOpen(false)
-    setCompletionNote("")
+    setIsSubmitting(true)
+
+    try {
+      let proofPhotoUrl: string | null = null
+
+      // 1. Upload proof photo if provided
+      if (proofPhoto) {
+        const ext = proofPhoto.name.split('.').pop()
+        const path = `worker-proofs/${displayTask.id}_${Date.now()}.${ext}`
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('worker-proofs')
+          .upload(path, proofPhoto, { upsert: true })
+        if (uploadErr) {
+          console.error('[WORKER] proof upload error:', uploadErr)
+        } else {
+          const { data: urlData } = supabase.storage.from('worker-proofs').getPublicUrl(uploadData.path)
+          proofPhotoUrl = urlData.publicUrl
+        }
+      }
+
+      // 2. Set next status based on whether it is a CCTV-ticket or normal
+      const nextStatus = displayTask.cameraId ? 'in_progress' : 'pending_closure'
+
+      // 3. Update complaint status + store proof URL
+      const updatePayload: Record<string, unknown> = {
+        status: nextStatus,
+      }
+      if (proofPhotoUrl) updatePayload['proof_photo_url'] = proofPhotoUrl
+
+      const { error: updateErr } = await supabase
+        .from('complaints')
+        .update(updatePayload)
+        .eq('id', displayTask.id)
+
+      if (updateErr) {
+        console.error('[WORKER] complaint update error:', updateErr)
+        setError('Failed to update ticket. Please try again.')
+        return
+      }
+
+      // 4. Trigger Notifications if normal ticket
+      if (!displayTask.cameraId) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+            await fetch(`${apiUrl}/api/notify/closure-confirmation`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ complaint_id: displayTask.id }),
+            })
+          }
+        } catch (err) {
+          console.error("WhatsApp notification failed (non-blocking):", err)
+        }
+      }
+
+      // 5. If this is a CCTV ticket, trigger Pending Verification on the camera card
+      if (displayTask.cameraId) {
+        const sbAny = supabase as any
+        const { error: camErr } = await sbAny
+          .from('cctv_cameras')
+          .update({ last_status: 'Pending Verification' })
+          .eq('id', displayTask.cameraId)
+        if (camErr) {
+          console.error('[WORKER] camera status update error:', camErr)
+        }
+      }
+
+      // 6. Log to ticket_history
+      if (workerId) {
+        await supabase.from('ticket_history').insert({
+          changed_by: workerId,
+          complaint_id: displayTask.id,
+          old_status: displayTask.status,
+          new_status: nextStatus,
+          note: completionNote || (displayTask.cameraId ? 'Worker marked repair complete. Awaiting CCTV verification.' : 'Worker marked complete. Awaiting citizen confirmation.'),
+          is_internal: false,
+        })
+      }
+
+      setIsCompletionModalOpen(false)
+      setCompletionNote('')
+      setProofPhoto(null)
+      fetchDashboardData()
+    } catch (err) {
+      console.error('[WORKER] handleConfirmComplete error:', err)
+      setError('Unexpected error. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -574,16 +669,29 @@ export default function WorkerDashboardPage() {
             onClick={() => setIsCompletionModalOpen(false)}
           />
           <div className="relative z-10 w-full max-w-md rounded-xl border border-gray-200 bg-white p-4 shadow-lg sm:p-5 dark:border-[#2a2a2a] dark:bg-[#1e1e1e]">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Complete Ticket</h3>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              Ticket {displayTask.ticketId} will be sent to the citizen for confirmation before final closure.
-            </p>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Mark Repair as Complete</h3>
+            {displayTask.cameraId ? (
+              <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+                ⚠️ This is a CCTV ticket. After submission, the Admin Surveillance card will activate for verification.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                Ticket {displayTask.ticketId} will be sent to the citizen for confirmation before final closure.
+              </p>
+            )}
 
-            <label className="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300">Proof image (future flow)</label>
+            <label className="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300">
+              Proof photo <span className="text-gray-400">(recommended)</span>
+            </label>
             <input
               type="file"
+              accept="image/*"
+              onChange={(e) => setProofPhoto(e.target.files?.[0] ?? null)}
               className="mt-2 block w-full rounded-lg border border-gray-300 bg-white p-2 text-sm text-gray-700 dark:border-[#3a3a3a] dark:bg-[#1a1a1a] dark:text-gray-200"
             />
+            {proofPhoto && (
+              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">✓ {proofPhoto.name} selected</p>
+            )}
 
             <label className="mt-3 block text-xs font-medium text-gray-600 dark:text-gray-300">Completion note (optional)</label>
             <textarea
@@ -597,17 +705,19 @@ export default function WorkerDashboardPage() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setIsCompletionModalOpen(false)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-[#3a3a3a] dark:text-gray-200 dark:hover:bg-[#2a2a2a]"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-[#3a3a3a] dark:text-gray-200 dark:hover:bg-[#2a2a2a]"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleConfirmComplete}
-                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
               >
-                Confirm Complete
+                {isSubmitting ? 'Submitting...' : 'Submit Completion'}
               </button>
             </div>
           </div>
