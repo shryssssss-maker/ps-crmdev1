@@ -23,8 +23,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the Next.js app
-# Disable telemetry during build
+# Disable telemetry and provide dummy envs for build-time data collection
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_SUPABASE_URL=https://dummy.supabase.co
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy
+ENV SUPABASE_SERVICE_ROLE_KEY=dummy
 RUN pnpm run build
 
 # Stage 3: Runner
