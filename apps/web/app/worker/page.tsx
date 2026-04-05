@@ -679,6 +679,10 @@ export default function WorkerDashboardPage() {
                 Ticket {displayTask.ticketId} will be sent to the citizen for confirmation before final closure.
               </p>
             )}
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Complete Ticket</h3>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+              Ticket {displayTask.ticketId} will be sent to the citizen for confirmation before final closure.
+            </p>
 
             <label className="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300">
               Proof photo <span className="text-gray-400">(recommended)</span>

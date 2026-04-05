@@ -225,6 +225,8 @@ async def cctv_analyze_live(
         except Exception as e:
             print(f"[AI Proxy Error] {e}")
             raise HTTPException(status_code=502, detail=f"Failed to reach AI service: {str(e)}")
+class ClosureConfirmationRequest(BaseModel):
+    complaint_id: str
 
 
 # =========================================================
