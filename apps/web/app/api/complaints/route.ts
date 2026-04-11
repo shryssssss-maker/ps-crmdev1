@@ -1,4 +1,5 @@
 // app/api/complaints/route.ts — Insert a complaint into Supabase
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
